@@ -59,6 +59,12 @@ int guardar_zonas(Zona zonas[], int num_zonas) {
     return 1;
 }
 
+int comparar_fechas(const void *a, const void *b) {
+    RegistroDia *regA = (RegistroDia *)a;
+    RegistroDia *regB = (RegistroDia *)b;
+    return strcmp(regA->fecha, regB->fecha);
+}
+
 void mostrar_menu() {
     printf("\n============================================================\n");
     printf("    SISTEMA INTEGRAL DE GESTION DE CONTAMINACION DEL AIRE\n");
@@ -181,25 +187,65 @@ void anadir_zona(Zona zonas[], int *num_zonas) {
     fgets(nueva_zona->nombre, NOMBRE_ZONA, stdin);
     nueva_zona->nombre[strcspn(nueva_zona->nombre, "\n")] = 0;
 
-    // Se añaden 4 días de datos de ejemplo para que las predicciones funcionen
-    nueva_zona->dias_registrados = 4;
-    for (int i = 0; i < 4; i++) {
+    int dias_a_generar;
+    if (!leer_int("\nCuantos dias de datos de ejemplo desea registrar (1-7)?\n(Se recomiendan al menos 3 para que las predicciones funcionen): ", 1, 7, &dias_a_generar)) {
+        printf("Operacion cancelada.\n");
+        return;
+    }
+
+    int modo_ingreso;
+    printf("\nSeleccione el modo de ingreso de datos:\n");
+    printf("1. Generar datos automaticamente\n");
+    printf("2. Ingresar datos manualmente\n");
+    if (!leer_int("Opcion: ", 1, 2, &modo_ingreso)) {
+        printf("Operacion cancelada.\n");
+        return;
+    }
+
+    // Se añaden los días de datos de ejemplo solicitados
+    nueva_zona->dias_registrados = dias_a_generar;
+    for (int i = 0; i < dias_a_generar; i++) {
         RegistroDia *r = &nueva_zona->historial[i];
-        sprintf(r->fecha, "2025-07-%02d", i + 1); // Fechas de ejemplo
-        r->pm25 = 15.0f + (rand() % 200) / 10.0f;
-        r->pm10 = 25.0f + (rand() % 300) / 10.0f;
-        r->co2 = 400.0f + (rand() % 2000) / 10.0f;
-        r->so2 = 5.0f + (rand() % 150) / 10.0f;
-        r->no2 = 10.0f + (rand() % 300) / 10.0f;
-        r->temperatura = 10.0f + (rand() % 150) / 10.0f;
-        r->humedad = 50.0f + (rand() % 300) / 10.0f;
-        r->velocidad_viento = 5.0f + (rand() % 150) / 10.0f;
+        printf("\n--- Ingresando datos para el dia %d de %d ---\n", i + 1, dias_a_generar);
+
+        if (modo_ingreso == 1) { // Generación automática
+            // Usamos la fecha actual del sistema para generar fechas más realistas hacia atrás
+            time_t t = time(NULL);
+            struct tm *tm_info = localtime(&t);
+            tm_info->tm_mday -= (dias_a_generar - 1 - i); // Restamos días para ir hacia el pasado
+            mktime(tm_info); // Normalizamos la fecha
+            strftime(r->fecha, sizeof(r->fecha), "%Y-%m-%d", tm_info);
+
+            r->pm25 = 15.0f + (rand() % 200) / 10.0f;
+            r->pm10 = 25.0f + (rand() % 300) / 10.0f;
+            r->co2 = 400.0f + (rand() % 2000) / 10.0f;
+            r->so2 = 5.0f + (rand() % 150) / 10.0f;
+            r->no2 = 10.0f + (rand() % 300) / 10.0f;
+            r->temperatura = 10.0f + (rand() % 150) / 10.0f;
+            r->humedad = 50.0f + (rand() % 300) / 10.0f;
+            r->velocidad_viento = 5.0f + (rand() % 150) / 10.0f;
+            printf("Datos para fecha %s generados automaticamente.\n", r->fecha);
+        } else { // Ingreso manual
+            printf("Ingrese la fecha (YYYY-MM-DD): ");
+            fgets(r->fecha, sizeof(r->fecha), stdin);
+            r->fecha[strcspn(r->fecha, "\n")] = 0;
+            leer_float("PM2.5: ", 0, 99999, &r->pm25);
+            leer_float("PM10: ", 0, 99999, &r->pm10);
+            leer_float("CO2: ", 0, 99999, &r->co2);
+            leer_float("SO2: ", 0, 99999, &r->so2);
+            leer_float("NO2: ", 0, 99999, &r->no2);
+            leer_float("Temperatura (C): ", -50, 60, &r->temperatura);
+            leer_float("Humedad (%%): ", 0, 100, &r->humedad);
+            leer_float("Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
+        }
     }
 
     (*num_zonas)++;
     guardar_zonas(zonas, *num_zonas);
-    printf("\nZona agregada correctamente con 4 dias de datos de ejemplo.\n");
-    printf("Ya puede utilizar la funcion de prediccion para esta zona.\n");
+    printf("\nZona agregada correctamente con %d dias de datos.\n", dias_a_generar);
+    if (dias_a_generar >= 3) {
+        printf("Ya puede utilizar la funcion de prediccion para esta zona.\n");
+    }
 }
 
 void editar_zona(Zona zonas[], int num_zonas) {
@@ -215,9 +261,10 @@ void editar_zona(Zona zonas[], int num_zonas) {
     do {
         printf("\n--- Editando Zona: %s ---\n", z->nombre);
         printf("1. Editar Nombre\n");
-        printf("2. Editar datos de un dia\n");
+        printf("2. Editar todos los datos de un dia\n");
+        printf("3. Editar solo la fecha de un dia\n");
         printf("0. Volver al menu principal\n");
-        if (!leer_int("Opcion: ", 0, 2, &op_edit)) continue;
+        if (!leer_int("Opcion: ", 0, 3, &op_edit)) continue;
 
         switch (op_edit) {
             case 1: {
@@ -254,6 +301,36 @@ void editar_zona(Zona zonas[], int num_zonas) {
                 leer_float("Nueva Humedad (%%): ", 0, 100, &r->humedad);
                 leer_float("Nueva Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
                 printf("Datos del %s actualizados.\n", r->fecha);
+                break;
+            }
+            case 3: {
+                if (z->dias_registrados == 0) {
+                    printf("No hay datos historicos para editar.\n");
+                    break;
+                }
+                printf("Seleccione el registro para cambiar la fecha:\n");
+                for (int i = 0; i < z->dias_registrados; i++) {
+                    printf("%d. %s\n", i + 1, z->historial[i].fecha);
+                }
+                int op_fecha;
+                if (!leer_int("Opcion: ", 1, z->dias_registrados, &op_fecha)) break;
+
+                RegistroDia *r = &z->historial[op_fecha - 1];
+                char fecha_anterior[11];
+                strcpy(fecha_anterior, r->fecha);
+
+                printf("Ingrese la nueva fecha (YYYY-MM-DD): ");
+                fgets(r->fecha, sizeof(r->fecha), stdin);
+                r->fecha[strcspn(r->fecha, "\n")] = 0;
+                if (strlen(r->fecha) > 0) {
+                    printf("Fecha del registro actualizada de %s a %s.\n", fecha_anterior, r->fecha);
+                    qsort(z->historial, z->dias_registrados, sizeof(RegistroDia), comparar_fechas);
+                    printf("El historial de la zona ha sido reordenado cronologicamente.\n");
+                } else {
+                    // Si el usuario no ingresa nada, restauramos la fecha original
+                    strcpy(r->fecha, fecha_anterior);
+                    printf("No se ingreso nueva fecha. La fecha no ha cambiado.\n");
+                }
                 break;
             }
         }
@@ -311,17 +388,32 @@ void mostrar_predicciones(Zona zonas[], int num_zonas) {
 }
 
 void mostrar_info_zonas(Zona zonas[], int num_zonas) {
-    printf("\nINFORMACION DE ZONAS MONITOREADAS:\n");
+    if (num_zonas == 0) {
+        printf("\nNo hay zonas registradas para mostrar.\n");
+        return;
+    }
+
+    int op;
+    printf("\nSeleccione la zona para ver su informacion:\n");
     for (int i = 0; i < num_zonas; i++) {
-        printf("\nZona: %s\n", zonas[i].nombre);
-        printf("------------------------------------------------------------\n");
-        printf("Fecha      | PM2.5 | PM10 | CO2  | SO2  | NO2  | Temp | Hum | V.Viento\n");
-        printf("-----------|-------|------|------|------|------|------|-----|----------\n");
-        for (int j = 0; j < zonas[i].dias_registrados; j++) {
-            RegistroDia *r = &zonas[i].historial[j];
+        printf("%d. %s\n", i + 1, zonas[i].nombre);
+    }
+    if (!leer_int("Opcion: ", 1, num_zonas, &op)) return;
+
+    Zona *z = &zonas[op - 1];
+
+    printf("\nINFORMACION DE ZONA MONITOREADA: %s\n", z->nombre);
+    printf("------------------------------------------------------------\n");
+    printf("Fecha      | PM2.5 | PM10 | CO2  | SO2  | NO2  | Temp | Hum | V.Viento\n");
+    printf("-----------|-------|------|------|------|------|------|-----|----------\n");
+    if (z->dias_registrados > 0) {
+        for (int j = 0; j < z->dias_registrados; j++) {
+            RegistroDia *r = &z->historial[j];
             printf("%-10s | %5.1f | %4.1f | %4.1f | %4.1f | %4.1f | %4.1f | %3.1f | %7.1f\n",
                 r->fecha, r->pm25, r->pm10, r->co2, r->so2, r->no2, r->temperatura, r->humedad, r->velocidad_viento);
         }
+    } else {
+        printf("No hay datos registrados para esta zona.\n");
     }
 }
 
