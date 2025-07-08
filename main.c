@@ -37,13 +37,65 @@ int main() {
     printf("Presione Enter para continuar...");
     getchar(); // Pausa para que el usuario lea la información
     
-    // ========== MENU PRINCIPAL DEL SISTEMA ==========
+    // ========== MENU PRINCIPAL DEL SISTEMA ========== 
     do {
         mostrar_menu_principal();                    // Mostrar opciones disponibles
-        scanf("%d", &opcion);                        // Leer selección del usuario
+        printf("\n");
+        scanf("%d", &opcion);                        // Leer seleccion del usuario
         
-        // Procesar la opción seleccionada
+        // Procesar la opcion seleccionada
         switch(opcion) {
+            case 9: {
+                if (sistema.num_zonas >= MAX_ZONAS) {
+                    printf("No se pueden agregar mas zonas. Limite alcanzado (%d zonas).\n", MAX_ZONAS);
+                    break;
+                }
+                int id = sistema.num_zonas + 1;
+                char nombre[MAX_NOMBRE_ZONA];
+                float lat, lon;
+                printf("Ingrese el nombre de la nueva zona (sin espacios, use _): ");
+                scanf("%s", nombre);
+                printf("Ingrese latitud: ");
+                scanf("%f", &lat);
+                printf("Ingrese longitud: ");
+                scanf("%f", &lon);
+                agregar_zona(&sistema, id, nombre, lat, lon);
+                printf("\nAhora ingrese los datos de los ultimos 7 dias para la nueva zona.\n");
+                for (int d = 0; d < 7; d++) {
+                    DatosContaminacion datos;
+                    printf("\nDia %d:\n", d+1);
+                    printf("Fecha (dia mes anio): ");
+                    scanf("%d %d %d", &datos.dia, &datos.mes, &datos.ano);
+                    printf("PM2.5 (ug/m3): ");
+                    scanf("%f", &datos.pm25);
+                    printf("PM10 (ug/m3): ");
+                    scanf("%f", &datos.pm10);
+                    printf("CO2 (ug/m3): ");
+                    scanf("%f", &datos.co2);
+                    printf("SO2 (ug/m3): ");
+                    scanf("%f", &datos.so2);
+                    printf("NO2 (ug/m3): ");
+                    scanf("%f", &datos.no2);
+                    printf("Temperatura (C): ");
+                    scanf("%f", &datos.temperatura);
+                    printf("Humedad (%%): ");
+                    scanf("%f", &datos.humedad);
+                    printf("Velocidad del viento (km/h): ");
+                    scanf("%f", &datos.velocidad_viento);
+                    agregar_datos_historicos(&sistema, id, datos);
+                }
+                // Actualizar datos actuales y prediccion
+                for (int i = 0; i < sistema.num_zonas; i++) {
+                    if (sistema.zonas[i].id == id) {
+                        sistema.zonas[i].datos_actuales = sistema.zonas[i].historial[sistema.zonas[i].num_registros_historicos-1];
+                        predecir_contaminacion_24h(&sistema.zonas[i]);
+                        break;
+                    }
+                }
+                guardar_datos_archivo(&sistema);
+                printf("Zona anadida y datos guardados correctamente.\n");
+                break;
+            }
             case 1:
                 // Mostrar estado actual de todas las zonas
                 mostrar_estado_actual(&sistema);
@@ -127,6 +179,34 @@ int main() {
                 exportar_datos_binario(&sistema);
                 break;
                 
+            case 10:
+                // Editar datos de una zona específica
+                printf("\nIngrese el ID de la zona a editar (1-%d): ", sistema.num_zonas);
+                scanf("%d", &zona_id);
+                if (zona_id >= 1 && zona_id <= sistema.num_zonas) {
+                    editar_datos_zona(&sistema, zona_id);           // Editar datos de la zona
+                    sistema.ultima_actualizacion = time(NULL);      // Actualizar timestamp
+                    guardar_datos_archivo(&sistema);                // Guardar automáticamente
+                } else {
+                    printf("ERROR: ID de zona invalido. Debe estar entre 1 y %d.\n", sistema.num_zonas);
+                }
+                break;
+                
+            case 11:
+                // Eliminar una zona completa del sistema
+                printf("\nIngrese el ID de la zona a eliminar (1-%d): ", sistema.num_zonas);
+                scanf("%d", &zona_id);
+                if (zona_id >= 1 && zona_id <= sistema.num_zonas) {
+                    if (eliminar_zona(&sistema, zona_id)) {         // Intentar eliminar la zona
+                        sistema.ultima_actualizacion = time(NULL);  // Actualizar timestamp
+                        guardar_datos_archivo(&sistema);            // Guardar automáticamente
+                        printf("Los cambios han sido guardados exitosamente.\n");
+                    }
+                } else {
+                    printf("ERROR: ID de zona invalido. Debe estar entre 1 y %d.\n", sistema.num_zonas);
+                }
+                break;
+                
             case 1000:
                 // Opción especial: reiniciar completamente el sistema
                 printf("\n=== ADVERTENCIA ===\n");
@@ -163,7 +243,7 @@ int main() {
                 // Opción inválida
                 printf("\n=== ERROR ===\n");
                 printf("Opcion invalida. Por favor, seleccione una opcion valida del menu.\n");
-                printf("Las opciones disponibles son: 1-8, 1000, o 0 para salir.\n");
+                printf("Las opciones disponibles son: 1-11, 1000, o 0 para salir.\n");
                 break;
         }
         

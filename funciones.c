@@ -106,20 +106,53 @@ void inicializar_sistema(SistemaContaminacion *sistema) {
  * @param sistema: puntero al sistema donde cargar los datos
  */
 void cargar_datos_archivo(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen(ARCHIVO_DATOS, "rb");    // Abrir archivo en modo lectura binaria
-    if (archivo == NULL) {
-        // Si no existe el archivo, es la primera vez que se ejecuta el programa
-        printf("No se encontro archivo de datos existente. Iniciando con datos nuevos.\n");
+    // Solo trabajar con datos_iniciales.txt como fuente principal
+    FILE *txt = fopen("datos_iniciales.txt", "r");
+    if (txt == NULL) {
+        printf("No se encontro archivo de datos_iniciales.txt. Iniciando con datos vacios.\n");
+        sistema->num_zonas = 0;
         return;
     }
-    
-    // Leer la estructura completa del archivo binario
-    fread(&sistema->num_zonas, sizeof(int), 1, archivo);           // Leer número de zonas
-    fread(sistema->zonas, sizeof(ZonaMonitoreo), sistema->num_zonas, archivo);  // Leer todas las zonas
-    fread(&sistema->ultima_actualizacion, sizeof(time_t), 1, archivo);         // Leer timestamp
-    
-    fclose(archivo);
-    printf("Datos historicos cargados exitosamente desde archivo binario.\n");
+    int n;
+    fscanf(txt, "%d", &n);
+    sistema->num_zonas = n;
+    // Leer 7 días por cada zona
+    for (int z = 0; z < n; z++) {
+        ZonaMonitoreo *zona = &sistema->zonas[z];
+        zona->num_registros_historicos = 0;
+        for (int d = 0; d < 7; d++) {
+            int id, dia, mes, ano;
+            char nombre[50];
+            float lat, lon, pm25, pm10, co2, so2, no2, temp, hum, viento;
+            fscanf(txt, "%d %s %f %f %d %d %d %f %f %f %f %f %f %f %f %f",
+                &id, nombre, &lat, &lon, &dia, &mes, &ano, &pm25, &pm10, &co2, &so2, &no2, &temp, &hum, &viento);
+            if (d == 0) {
+                zona->id = id;
+                strcpy(zona->nombre, nombre);
+                zona->latitud = lat;
+                zona->longitud = lon;
+            }
+            DatosContaminacion *dat = &zona->historial[d];
+            dat->dia = dia;
+            dat->mes = mes;
+            dat->ano = ano;
+            dat->pm25 = pm25;
+            dat->pm10 = pm10;
+            dat->co2 = co2;
+            dat->so2 = so2;
+            dat->no2 = no2;
+            dat->temperatura = temp;
+            dat->humedad = hum;
+            dat->velocidad_viento = viento;
+            zona->num_registros_historicos++;
+        }
+        zona->datos_actuales = zona->historial[6]; // El último día es el actual
+        predecir_contaminacion_24h(zona);
+    }
+    fclose(txt);
+    sistema->ultima_actualizacion = time(NULL);
+    printf("Datos cargados exitosamente desde datos_iniciales.txt.\n");
+    return;
 }
 
 /**
@@ -128,19 +161,25 @@ void cargar_datos_archivo(SistemaContaminacion *sistema) {
  * @param sistema: puntero al sistema cuyos datos se van a guardar
  */
 void guardar_datos_archivo(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen(ARCHIVO_DATOS, "wb");    // Abrir archivo en modo escritura binaria
-    if (archivo == NULL) {
-        printf("Error al crear archivo de datos binario.\n");
+    // Guardar datos en datos_iniciales.txt (sobrescribe)
+    FILE *txt = fopen("datos_iniciales.txt", "w");
+    if (txt == NULL) {
+        printf("Error al crear archivo de datos_iniciales.txt.\n");
         return;
     }
-    
-    // Escribir toda la estructura del sistema al archivo binario
-    fwrite(&sistema->num_zonas, sizeof(int), 1, archivo);           // Escribir número de zonas
-    fwrite(sistema->zonas, sizeof(ZonaMonitoreo), sistema->num_zonas, archivo);  // Escribir todas las zonas
-    fwrite(&sistema->ultima_actualizacion, sizeof(time_t), 1, archivo);         // Escribir timestamp
-    
-    fclose(archivo);
-    printf("Datos guardados exitosamente en archivo binario.\n");
+    fprintf(txt, "%d\n", sistema->num_zonas);
+    for (int z = 0; z < sistema->num_zonas; z++) {
+        ZonaMonitoreo *zona = &sistema->zonas[z];
+        for (int d = 0; d < zona->num_registros_historicos; d++) {
+            DatosContaminacion *dat = &zona->historial[d];
+            fprintf(txt, "%d %s %.4f %.4f %d %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+                zona->id, zona->nombre, zona->latitud, zona->longitud,
+                dat->dia, dat->mes, dat->ano, dat->pm25, dat->pm10, dat->co2, dat->so2, dat->no2,
+                dat->temperatura, dat->humedad, dat->velocidad_viento);
+        }
+    }
+    fclose(txt);
+    printf("Datos guardados exitosamente en datos_iniciales.txt.\n");
 }
 
 /**
@@ -224,29 +263,14 @@ void ingresar_datos_actuales(SistemaContaminacion *sistema, int zona_id) {
     zona->datos_actuales.ano = ano;
     
     printf("Ingrese los siguientes datos de contaminacion:\n");
-    printf("PM2.5 (ug/m3): ");
-    scanf("%f", &zona->datos_actuales.pm25);
-    
-    printf("Ingrese PM10 (ug/m3): ");
-    scanf("%f", &zona->datos_actuales.pm10);
-    
-    printf("Ingrese CO2 (ug/m3): ");
-    scanf("%f", &zona->datos_actuales.co2);
-    
-    printf("Ingrese SO2 (ug/m3): ");
-    scanf("%f", &zona->datos_actuales.so2);
-    
-    printf("Ingrese NO2 (ug/m3): ");
-    scanf("%f", &zona->datos_actuales.no2);
-    
-    printf("Ingrese temperatura (C): ");
-    scanf("%f", &zona->datos_actuales.temperatura);
-    
-    printf("Ingrese humedad (%%): ");
-    scanf("%f", &zona->datos_actuales.humedad);
-    
-    printf("Ingrese velocidad del viento (km/h): ");
-    scanf("%f", &zona->datos_actuales.velocidad_viento);
+    leer_float_validado(&zona->datos_actuales.pm25, "PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
+    leer_float_validado(&zona->datos_actuales.pm10, "PM10 (ug/m3): ", 0.0, 1000.0, 0);
+    leer_float_validado(&zona->datos_actuales.co2, "CO2 (ug/m3): ", 0.0, 100000.0, 0);
+    leer_float_validado(&zona->datos_actuales.so2, "SO2 (ug/m3): ", 0.0, 1000.0, 0);
+    leer_float_validado(&zona->datos_actuales.no2, "NO2 (ug/m3): ", 0.0, 1000.0, 0);
+    leer_float_validado(&zona->datos_actuales.temperatura, "Temperatura (C): ", -50.0, 60.0, 1);
+    leer_float_validado(&zona->datos_actuales.humedad, "Humedad (%): ", 0.0, 100.0, 0);
+    leer_float_validado(&zona->datos_actuales.velocidad_viento, "Velocidad del viento (km/h): ", 0.0, 200.0, 0);
     
     printf("Datos ingresados exitosamente.\n");
     
@@ -511,7 +535,350 @@ void generar_recomendaciones(SistemaContaminacion *sistema, int zona_id, Recomen
     }
 }
 
-// Función para generar reporte completo
+/*
+ * ============================================================================
+ * FUNCIONES DE VALIDACION DE ENTRADA
+ * ============================================================================
+ */
+
+/**
+ * Valida que un valor numérico esté en el rango permitido
+ * @param valor: puntero al valor a validar
+ * @param min: valor mínimo permitido
+ * @param max: valor máximo permitido
+ * @param puede_ser_negativo: 1 si puede ser negativo, 0 si no
+ * @return: 1 si es válido, 0 si no es válido
+ */
+int validar_entrada_numerica(float *valor, float min, float max, int puede_ser_negativo) {
+    // Verificar si puede ser negativo
+    if (!puede_ser_negativo && *valor < 0) {
+        printf("ERROR: El valor no puede ser negativo.\n");
+        return 0;
+    }
+    
+    // Verificar rango
+    if (*valor < min || *valor > max) {
+        if (puede_ser_negativo) {
+            printf("ERROR: El valor debe estar entre %.2f y %.2f.\n", min, max);
+        } else {
+            printf("ERROR: El valor debe estar entre %.2f y %.2f (no negativo).\n", min, max);
+        }
+        return 0;
+    }
+    
+    return 1;
+}
+
+/**
+ * Lee un número flotante del usuario con validación automática
+ * @param valor: puntero donde almacenar el valor leído
+ * @param mensaje: mensaje a mostrar al usuario
+ * @param min: valor mínimo permitido
+ * @param max: valor máximo permitido
+ * @param puede_ser_negativo: 1 si puede ser negativo, 0 si no
+ * @return: 1 si se leyó exitosamente, 0 si se canceló
+ */
+int leer_float_validado(float *valor, char *mensaje, float min, float max, int puede_ser_negativo) {
+    char buffer[100];
+    char *endptr;
+    int intentos = 0;
+    const int max_intentos = 3;
+    
+    while (intentos < max_intentos) {
+        printf("%s", mensaje);
+        
+        // Leer como string para validar mejor
+        if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
+            printf("ERROR: Error al leer la entrada.\n");
+            intentos++;
+            continue;
+        }
+        
+        // Intentar convertir a float
+        *valor = strtof(buffer, &endptr);
+        
+        // Verificar si la conversión fue exitosa
+        if (endptr == buffer || (*endptr != '\n' && *endptr != '\0')) {
+            printf("ERROR: Debe ingresar un numero valido. Intento %d de %d.\n", 
+                   intentos + 1, max_intentos);
+            intentos++;
+            continue;
+        }
+        
+        // Validar el rango
+        if (validar_entrada_numerica(valor, min, max, puede_ser_negativo)) {
+            return 1; // Éxito
+        }
+        
+        intentos++;
+        printf("Intento %d de %d.\n", intentos, max_intentos);
+    }
+    
+    printf("Se agotaron los intentos. Usando valor por defecto: %.2f\n", min);
+    *valor = min;
+    return 0;
+}
+
+/*
+ * ============================================================================
+ * FUNCIONES DE EDICION Y ELIMINACION DE ZONAS
+ * ============================================================================
+ */
+
+/**
+ * Permite editar los datos de contaminación actuales de una zona específica
+ * @param sistema: puntero al sistema principal
+ * @param zona_id: ID de la zona a editar
+ */
+void editar_datos_zona(SistemaContaminacion *sistema, int zona_id) {
+    ZonaMonitoreo *zona = NULL;
+    
+    // Buscar la zona
+    for (int i = 0; i < sistema->num_zonas; i++) {
+        if (sistema->zonas[i].id == zona_id) {
+            zona = &sistema->zonas[i];
+            break;
+        }
+    }
+    
+    if (zona == NULL) {
+        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
+        return;
+    }
+    
+    printf("\n=== EDICION DE DATOS - ZONA: %s ===\n", zona->nombre);
+    
+    // Mostrar datos actuales
+    if (zona->datos_actuales.dia != 0) {
+        printf("\nDATOS ACTUALES:\n");
+        printf("PM2.5: %.2f ug/m3\n", zona->datos_actuales.pm25);
+        printf("PM10: %.2f ug/m3\n", zona->datos_actuales.pm10);
+        printf("CO2: %.2f ug/m3\n", zona->datos_actuales.co2);
+        printf("SO2: %.2f ug/m3\n", zona->datos_actuales.so2);
+        printf("NO2: %.2f ug/m3\n", zona->datos_actuales.no2);
+        printf("Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
+        printf("Humedad: %.1f%%\n", zona->datos_actuales.humedad);
+        printf("Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
+    } else {
+        printf("Esta zona aun no tiene datos registrados.\n");
+    }
+    
+    printf("\n¿Que desea editar?\n");
+    printf("1. PM2.5\n");
+    printf("2. PM10\n");
+    printf("3. CO2\n");
+    printf("4. SO2\n");
+    printf("5. NO2\n");
+    printf("6. Temperatura\n");
+    printf("7. Humedad\n");
+    printf("8. Velocidad del viento\n");
+    printf("9. Todos los valores\n");
+    printf("0. Cancelar\n");
+    printf("Seleccione una opcion: ");
+    
+    int opcion;
+    scanf("%d", &opcion);
+    
+    // Guardar datos anteriores al historial antes de editar
+    if (zona->datos_actuales.dia != 0) {
+        agregar_datos_historicos(sistema, zona_id, zona->datos_actuales);
+    }
+    
+    // Actualizar fecha
+    int dia, mes, ano;
+    obtener_fecha_actual(&dia, &mes, &ano);
+    zona->datos_actuales.dia = dia;
+    zona->datos_actuales.mes = mes;
+    zona->datos_actuales.ano = ano;
+    
+    switch(opcion) {
+        case 1:
+            leer_float_validado(&zona->datos_actuales.pm25, "Nuevo valor PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
+            break;
+        case 2:
+            leer_float_validado(&zona->datos_actuales.pm10, "Nuevo valor PM10 (ug/m3): ", 0.0, 1000.0, 0);
+            break;
+        case 3:
+            leer_float_validado(&zona->datos_actuales.co2, "Nuevo valor CO2 (ug/m3): ", 0.0, 100000.0, 0);
+            break;
+        case 4:
+            leer_float_validado(&zona->datos_actuales.so2, "Nuevo valor SO2 (ug/m3): ", 0.0, 1000.0, 0);
+            break;
+        case 5:
+            leer_float_validado(&zona->datos_actuales.no2, "Nuevo valor NO2 (ug/m3): ", 0.0, 1000.0, 0);
+            break;
+        case 6:
+            leer_float_validado(&zona->datos_actuales.temperatura, "Nueva temperatura (C): ", -50.0, 60.0, 1);
+            break;
+        case 7:
+            leer_float_validado(&zona->datos_actuales.humedad, "Nueva humedad (%): ", 0.0, 100.0, 0);
+            break;
+        case 8:
+            leer_float_validado(&zona->datos_actuales.velocidad_viento, "Nueva velocidad del viento (km/h): ", 0.0, 200.0, 0);
+            break;
+        case 9:
+            printf("\n=== INGRESO DE TODOS LOS VALORES ===\n");
+            leer_float_validado(&zona->datos_actuales.pm25, "PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
+            leer_float_validado(&zona->datos_actuales.pm10, "PM10 (ug/m3): ", 0.0, 1000.0, 0);
+            leer_float_validado(&zona->datos_actuales.co2, "CO2 (ug/m3): ", 0.0, 100000.0, 0);
+            leer_float_validado(&zona->datos_actuales.so2, "SO2 (ug/m3): ", 0.0, 1000.0, 0);
+            leer_float_validado(&zona->datos_actuales.no2, "NO2 (ug/m3): ", 0.0, 1000.0, 0);
+            leer_float_validado(&zona->datos_actuales.temperatura, "Temperatura (C): ", -50.0, 60.0, 1);
+            leer_float_validado(&zona->datos_actuales.humedad, "Humedad (%): ", 0.0, 100.0, 0);
+            leer_float_validado(&zona->datos_actuales.velocidad_viento, "Velocidad del viento (km/h): ", 0.0, 200.0, 0);
+            break;
+        case 0:
+            printf("Edicion cancelada.\n");
+            return;
+        default:
+            printf("Opcion invalida. Edicion cancelada.\n");
+            return;
+    }
+    
+    printf("Datos editados exitosamente.\n");
+    
+    // Actualizar predicción con los nuevos datos
+    predecir_contaminacion_24h(zona);
+}
+
+/**
+ * Elimina completamente una zona del sistema de monitoreo
+ * @param sistema: puntero al sistema principal
+ * @param zona_id: ID de la zona a eliminar
+ * @return: 1 si se eliminó exitosamente, 0 si no se encontró o hubo error
+ */
+int eliminar_zona(SistemaContaminacion *sistema, int zona_id) {
+    int indice_zona = -1;
+    
+    // Buscar el índice de la zona
+    for (int i = 0; i < sistema->num_zonas; i++) {
+        if (sistema->zonas[i].id == zona_id) {
+            indice_zona = i;
+            break;
+        }
+    }
+    
+    if (indice_zona == -1) {
+        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
+        return 0;
+    }
+    
+    printf("\n=== ELIMINAR ZONA ===\n");
+    printf("Zona a eliminar: %s (ID: %d)\n", sistema->zonas[indice_zona].nombre, zona_id);
+    printf("Coordenadas: (%.4f, %.4f)\n", 
+           sistema->zonas[indice_zona].latitud, sistema->zonas[indice_zona].longitud);
+    printf("Registros historicos: %d\n", sistema->zonas[indice_zona].num_registros_historicos);
+    
+    printf("\n¡ADVERTENCIA!\n");
+    printf("Esta operacion eliminara PERMANENTEMENTE:\n");
+    printf("- Todos los datos actuales de la zona\n");
+    printf("- Todo el historial de %d dias\n", sistema->zonas[indice_zona].num_registros_historicos);
+    printf("- Las predicciones generadas\n");
+    printf("- La configuracion de la zona\n");
+    printf("\nEsta operacion NO se puede deshacer.\n");
+    
+    printf("\n¿Esta seguro de que desea eliminar esta zona? (s/n): ");
+    char confirmacion;
+    scanf(" %c", &confirmacion);
+    
+    if (confirmacion != 's' && confirmacion != 'S') {
+        printf("Operacion cancelada. La zona se mantiene intacta.\n");
+        return 0;
+    }
+    
+    // Confirmar una segunda vez para estar seguro
+    printf("Escriba 'ELIMINAR' (en mayusculas) para confirmar definitivamente: ");
+    char confirmacion_final[20];
+    scanf("%s", confirmacion_final);
+    
+    if (strcmp(confirmacion_final, "ELIMINAR") != 0) {
+        printf("Confirmacion incorrecta. Operacion cancelada.\n");
+        return 0;
+    }
+    
+    // Proceder con la eliminación: mover todas las zonas siguientes hacia atrás
+    for (int i = indice_zona; i < sistema->num_zonas - 1; i++) {
+        sistema->zonas[i] = sistema->zonas[i + 1];
+    }
+    
+    // Reducir el contador de zonas
+    sistema->num_zonas--;
+    
+    printf("\nZona eliminada exitosamente.\n");
+    printf("El sistema ahora monitorea %d zonas.\n", sistema->num_zonas);
+    
+    // Actualizar timestamp del sistema
+    sistema->ultima_actualizacion = time(NULL);
+    
+    return 1;
+}
+
+/**
+ * Permite al usuario editar el nombre y coordenadas GPS de una zona existente
+ * @param sistema: puntero al sistema principal
+ * @param zona_id: ID de la zona a editar
+ */
+void editar_zona(SistemaContaminacion *sistema, int zona_id) {
+    ZonaMonitoreo *zona = NULL;
+    
+    // Buscar la zona
+    for (int i = 0; i < sistema->num_zonas; i++) {
+        if (sistema->zonas[i].id == zona_id) {
+            zona = &sistema->zonas[i];
+            break;
+        }
+    }
+    
+    if (zona == NULL) {
+        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
+        return;
+    }
+    
+    printf("\n=== EDICION DE ZONA - %s ===\n", zona->nombre);
+    printf("ID actual: %d\n", zona->id);
+    printf("Coordenadas actuales: (%.4f, %.4f)\n", zona->latitud, zona->longitud);
+    
+    // Editar nombre
+    char nuevo_nombre[100];
+    printf("Ingrese nuevo nombre para la zona (actual: %s): ", zona->nombre);
+    getchar(); // Limpiar buffer
+    fgets(nuevo_nombre, sizeof(nuevo_nombre), stdin);
+    nuevo_nombre[strcspn(nuevo_nombre, "\n")] = 0; // Eliminar salto de línea
+    
+    if (strlen(nuevo_nombre) > 0) {
+        strcpy(zona->nombre, nuevo_nombre);
+    }
+    
+    // Editar coordenadas
+    float nueva_latitud, nueva_longitud;
+    printf("Ingrese nueva latitud (actual: %.4f): ", zona->latitud);
+    scanf("%f", &nueva_latitud);
+    printf("Ingrese nueva longitud (actual: %.4f): ", zona->longitud);
+    scanf("%f", &nueva_longitud);
+    
+    // Validar coordenadas
+    if (nueva_latitud < -90.0 || nueva_latitud > 90.0 || nueva_longitud < -180.0 || nueva_longitud > 180.0) {
+        printf("ERROR: Coordenadas GPS invalidas. La zona no ha sido editada.\n");
+        return;
+    }
+    
+    zona->latitud = nueva_latitud;
+    zona->longitud = nueva_longitud;
+    
+    printf("Zona editada exitosamente.\n");
+}
+
+/*
+ * ============================================================================
+ * FUNCIONES DE REPORTES Y EXPORTACIÓN
+ * ============================================================================
+ */
+
+/**
+ * Genera un reporte completo de la situación actual de contaminación del aire
+ * Incluye datos actuales, predicciones, promedios históricos e índice de calidad del aire
+ * @param sistema: puntero al sistema del cual generar el reporte
+ */
 void generar_reporte_completo(SistemaContaminacion *sistema) {
     FILE *archivo = fopen(ARCHIVO_REPORTE, "w");
     if (archivo == NULL) {
@@ -681,11 +1048,15 @@ void mostrar_menu_principal() {
     printf("6. Generar recomendaciones para una zona\n");
     printf("7. Generar reporte completo\n");
     printf("8. Exportar copia de respaldo (binario)\n");
+    printf("9. Anadir nueva zona de monitoreo\n");
+    printf("10. Editar datos de una zona existente\n");
+    printf("11. Eliminar una zona del sistema\n");
     printf("0. Salir del sistema\n");
     printf("1000. Reiniciar programa (eliminar todos los datos)\n");
     printf("============================================================\n");
     printf("NOTA: Todos los datos se gestionan automaticamente en\n");
     printf("      formato binario para optimo rendimiento.\n");
+    printf("      El historial ahora almacena los ultimos 7 dias.\n");
     printf("============================================================\n");
     printf("Seleccione una opcion: ");
 }
@@ -730,6 +1101,24 @@ void mostrar_datos_zona(ZonaMonitoreo *zona) {
         printf("Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
         printf("Humedad: %.1f%%\n", zona->datos_actuales.humedad);
         printf("Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
+    }
+    
+    // Mostrar historial de los últimos 7 días
+    if (zona->num_registros_historicos > 0) {
+        printf("\n=== HISTORIAL DE LOS ULTIMOS 7 DIAS ===\n");
+        for (int i = zona->num_registros_historicos - 1; i >= 0; i--) {
+            DatosContaminacion *dato = &zona->historial[i];
+            printf("\nDia %d/%d/%d:\n", dato->dia, dato->mes, dato->ano);
+            printf("  PM2.5: %.2f | PM10: %.2f | CO2: %.2f\n", 
+                   dato->pm25, dato->pm10, dato->co2);
+            printf("  SO2: %.2f | NO2: %.2f | Temp: %.1fC\n", 
+                   dato->so2, dato->no2, dato->temperatura);
+            printf("  Humedad: %.1f%% | Viento: %.1f km/h\n", 
+                   dato->humedad, dato->velocidad_viento);
+        }
+    } else {
+        printf("\n=== HISTORIAL ===\n");
+        printf("No hay datos historicos disponibles para esta zona.\n");
     }
     
     printf("\nPREDICCIONES 24H:\n");

@@ -18,6 +18,7 @@
 // Librerías estándar de C necesarias para el funcionamiento del sistema
 #include <stdio.h>   // Para operaciones de entrada/salida (printf, scanf, archivos)
 #include <string.h>  // Para manipulación de cadenas de texto (strcpy, strcmp)
+#include <stdlib.h>  // Para conversiones de cadenas y manejo de memoria
 #include <time.h>    // Para manejo de fechas y horas
 
 /*
@@ -25,7 +26,7 @@
  * Estas constantes definen los límites y configuraciones básicas del programa
  */
 #define MAX_ZONAS 10                    // Máximo número de zonas que puede monitorear el sistema
-#define MAX_DIAS_HISTORICOS 30          // Máximo de días de historial que se almacenan por zona
+#define MAX_DIAS_HISTORICOS 7           // Máximo de días de historial que se almacenan por zona
 #define MAX_NOMBRE_ZONA 50              // Máximo de caracteres para el nombre de una zona
 #define MAX_LINEA 200                   // Máximo de caracteres por línea en archivos
 #define ARCHIVO_DATOS "datos_contaminacion.dat"      // Nombre del archivo binario principal
@@ -82,7 +83,7 @@ typedef struct {
     
     // Datos de contaminación
     DatosContaminacion datos_actuales;         // Última medición registrada
-    DatosContaminacion historial[MAX_DIAS_HISTORICOS];  // Historial de hasta 30 días
+    DatosContaminacion historial[MAX_DIAS_HISTORICOS];  // Historial de hasta 7 días
     int num_registros_historicos;              // Número actual de días en el historial
     
     // Predicciones para las próximas 24 horas (orden: PM2.5, PM10, CO2, SO2, NO2)
@@ -145,6 +146,18 @@ void ingresar_datos_actuales(SistemaContaminacion *sistema, int zona_id);
 
 // Agrega datos al historial de una zona (función interna para el manejo de datos)
 void agregar_datos_historicos(SistemaContaminacion *sistema, int zona_id, DatosContaminacion datos);
+
+// Edita los datos de contaminación actuales de una zona específica
+void editar_datos_zona(SistemaContaminacion *sistema, int zona_id);
+
+// Elimina completamente una zona del sistema de monitoreo
+int eliminar_zona(SistemaContaminacion *sistema, int zona_id);
+
+// Valida que un valor numérico esté en el rango permitido y no sea negativo (excepto temperatura)
+int validar_entrada_numerica(float *valor, float min, float max, int puede_ser_negativo);
+
+// Valida y lee un número flotante del usuario con reintentos en caso de entrada inválida
+int leer_float_validado(float *valor, char *mensaje, float min, float max, int puede_ser_negativo);
 
 /*
  * FUNCIONES DE ANALISIS Y PREDICCION
