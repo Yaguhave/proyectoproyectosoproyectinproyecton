@@ -35,5 +35,6 @@ int validar_float(float valor, float min, float max);
 int leer_float(const char *mensaje, float min, float max, float *valor);
 int leer_int(const char *mensaje, int min, int max, int *valor);
 void limpiar_buffer();
-
+int comparar_fechas(const void *a, const void *b);
+int leer_fecha(const char *mensaje, char *fecha_str);
 #endif

@@ -35,6 +35,7 @@ int cargar_zonas(Zona zonas[], int *num_zonas) {
                 return 0;
             }
         }
+        qsort(zonas[i].historial, zonas[i].dias_registrados, sizeof(RegistroDia), comparar_fechas);
     }
     fclose(f);
     return 1;
@@ -159,9 +160,10 @@ void ingresar_datos_actuales(Zona zonas[], int num_zonas) {
         z->dias_registrados--;
     }
     RegistroDia *r = &z->historial[z->dias_registrados];
-    printf("Ingrese la fecha (YYYY-MM-DD): ");
-    fgets(r->fecha, sizeof(r->fecha), stdin);
-    r->fecha[strcspn(r->fecha, "\n")] = 0;
+    if (!leer_fecha("Ingrese la fecha del nuevo registro:", r->fecha)) {
+        printf("Operacion cancelada.\n");
+        return;
+    }
     leer_float("PM2.5: ", 0, 99999, &r->pm25);
     leer_float("PM10: ", 0, 99999, &r->pm10);
     leer_float("CO2: ", 0, 99999, &r->co2);
@@ -171,8 +173,9 @@ void ingresar_datos_actuales(Zona zonas[], int num_zonas) {
     leer_float("Humedad (%%): ", 0, 100, &r->humedad);
     leer_float("Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
     z->dias_registrados++;
+    qsort(z->historial, z->dias_registrados, sizeof(RegistroDia), comparar_fechas);
     guardar_zonas(zonas, num_zonas);
-    printf("Datos ingresados correctamente.\n");
+    printf("Datos ingresados y ordenados correctamente.\n");
 }
 
 void anadir_zona(Zona zonas[], int *num_zonas) {
@@ -226,9 +229,12 @@ void anadir_zona(Zona zonas[], int *num_zonas) {
             r->velocidad_viento = 5.0f + (rand() % 150) / 10.0f;
             printf("Datos para fecha %s generados automaticamente.\n", r->fecha);
         } else { // Ingreso manual
-            printf("Ingrese la fecha (YYYY-MM-DD): ");
-            fgets(r->fecha, sizeof(r->fecha), stdin);
-            r->fecha[strcspn(r->fecha, "\n")] = 0;
+            if (!leer_fecha("Ingrese la fecha (YYYY-MM-DD):", r->fecha)) {
+                printf("Operacion cancelada.\n");
+                // Si se cancela, es mejor detener la creación de la zona
+                *num_zonas = (*num_zonas > 0) ? *num_zonas -1 : 0; // Temporalmente se deshace
+                return;
+            }
             leer_float("PM2.5: ", 0, 99999, &r->pm25);
             leer_float("PM10: ", 0, 99999, &r->pm10);
             leer_float("CO2: ", 0, 99999, &r->co2);
@@ -239,7 +245,7 @@ void anadir_zona(Zona zonas[], int *num_zonas) {
             leer_float("Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
         }
     }
-
+qsort(nueva_zona->historial, nueva_zona->dias_registrados, sizeof(RegistroDia), comparar_fechas);
     (*num_zonas)++;
     guardar_zonas(zonas, *num_zonas);
     printf("\nZona agregada correctamente con %d dias de datos.\n", dias_a_generar);
@@ -319,18 +325,18 @@ void editar_zona(Zona zonas[], int num_zonas) {
                 char fecha_anterior[11];
                 strcpy(fecha_anterior, r->fecha);
 
-                printf("Ingrese la nueva fecha (YYYY-MM-DD): ");
-                fgets(r->fecha, sizeof(r->fecha), stdin);
-                r->fecha[strcspn(r->fecha, "\n")] = 0;
-                if (strlen(r->fecha) > 0) {
-                    printf("Fecha del registro actualizada de %s a %s.\n", fecha_anterior, r->fecha);
-                    qsort(z->historial, z->dias_registrados, sizeof(RegistroDia), comparar_fechas);
-                    printf("El historial de la zona ha sido reordenado cronologicamente.\n");
-                } else {
-                    // Si el usuario no ingresa nada, restauramos la fecha original
-                    strcpy(r->fecha, fecha_anterior);
-                    printf("No se ingreso nueva fecha. La fecha no ha cambiado.\n");
+                char nueva_fecha[11];
+                if (!leer_fecha("Ingrese la nueva fecha:", nueva_fecha)) {
+                    printf("Operacion cancelada.\n");
+                    break;
                 }
+
+                strcpy(r->fecha, nueva_fecha);
+                printf("Fecha del registro actualizada de %s a %s.\n", fecha_anterior, r->fecha);
+                
+                // Ordenar el historial por fecha para mantener la consistencia cronológica
+                qsort(z->historial, z->dias_registrados, sizeof(RegistroDia), comparar_fechas);
+                printf("El historial de la zona ha sido reordenado cronologicamente.\n");
                 break;
             }
         }
@@ -595,4 +601,32 @@ void eliminar_zona(Zona zonas[], int *num_zonas) {
 void reiniciar_programa() {
     remove(ARCHIVO_DATOS);
     printf("Todos los datos han sido eliminados.\n");
+}
+int leer_fecha(const char *mensaje, char *fecha_str) {
+    int dia, mes, anio;
+    printf("%s\n", mensaje);
+
+    if (!leer_int("Anio (ej. 2024): ", 2000, 2050, &anio)) return 0;
+    if (!leer_int("Mes (1-12): ", 1, 12, &mes)) return 0;
+
+    int max_dias = 31;
+    if (mes == 4 || mes == 6 || mes == 9 || mes == 11) {
+        max_dias = 30;
+    } else if (mes == 2) {
+        // Comprobar si es año bisiesto
+        if ((anio % 4 == 0 && anio % 100 != 0) || (anio % 400 == 0)) {
+            max_dias = 29; // Año bisiesto
+        } else {
+            max_dias = 28; // Año no bisiesto
+        }
+    }
+
+    char mensaje_dia[50];
+    sprintf(mensaje_dia, "Dia (1-%d): ", max_dias);
+
+    if (!leer_int(mensaje_dia, 1, max_dias, &dia)) return 0;
+
+    // Formatea la fecha en la cadena de salida
+    sprintf(fecha_str, "%04d-%02d-%02d", anio, mes, dia);
+    return 1;
 }
