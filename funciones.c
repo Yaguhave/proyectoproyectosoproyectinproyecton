@@ -174,13 +174,32 @@ void anadir_zona(Zona zonas[], int *num_zonas) {
         printf("No se pueden agregar mas zonas.\n");
         return;
     }
+    
+    Zona *nueva_zona = &zonas[*num_zonas];
+
     printf("Nombre de la nueva zona: ");
-    fgets(zonas[*num_zonas].nombre, NOMBRE_ZONA, stdin);
-    zonas[*num_zonas].nombre[strcspn(zonas[*num_zonas].nombre, "\n")] = 0;
-    zonas[*num_zonas].dias_registrados = 0;
+    fgets(nueva_zona->nombre, NOMBRE_ZONA, stdin);
+    nueva_zona->nombre[strcspn(nueva_zona->nombre, "\n")] = 0;
+
+    // Se añaden 4 días de datos de ejemplo para que las predicciones funcionen
+    nueva_zona->dias_registrados = 4;
+    for (int i = 0; i < 4; i++) {
+        RegistroDia *r = &nueva_zona->historial[i];
+        sprintf(r->fecha, "2025-07-%02d", i + 1); // Fechas de ejemplo
+        r->pm25 = 15.0f + (rand() % 200) / 10.0f;
+        r->pm10 = 25.0f + (rand() % 300) / 10.0f;
+        r->co2 = 400.0f + (rand() % 2000) / 10.0f;
+        r->so2 = 5.0f + (rand() % 150) / 10.0f;
+        r->no2 = 10.0f + (rand() % 300) / 10.0f;
+        r->temperatura = 10.0f + (rand() % 150) / 10.0f;
+        r->humedad = 50.0f + (rand() % 300) / 10.0f;
+        r->velocidad_viento = 5.0f + (rand() % 150) / 10.0f;
+    }
+
     (*num_zonas)++;
     guardar_zonas(zonas, *num_zonas);
-    printf("Zona agregada correctamente.\n");
+    printf("\nZona agregada correctamente con 4 dias de datos de ejemplo.\n");
+    printf("Ya puede utilizar la funcion de prediccion para esta zona.\n");
 }
 
 void editar_zona(Zona zonas[], int num_zonas) {
