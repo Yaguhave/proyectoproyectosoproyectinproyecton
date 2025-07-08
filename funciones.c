@@ -113,9 +113,11 @@ void cargar_datos_archivo(SistemaContaminacion *sistema) {
         sistema->num_zonas = 0;
         return;
     }
-    int n;
-    fscanf(txt, "%d", &n);
-    sistema->num_zonas = n;
+    
+    // Leer número de zonas directamente
+    fscanf(txt, "%d", &sistema->num_zonas);
+    
+    int n = sistema->num_zonas;
     // Leer 7 días por cada zona
     for (int z = 0; z < n; z++) {
         ZonaMonitoreo *zona = &sistema->zonas[z];
@@ -167,6 +169,13 @@ void guardar_datos_archivo(SistemaContaminacion *sistema) {
         printf("Error al crear archivo de datos_iniciales.txt.\n");
         return;
     }
+    
+    // Escribir encabezado explicativo
+    fprintf(txt, "# DATOS INICIALES SISTEMA DE CONTAMINACION DEL AIRE - QUITO\n");
+    fprintf(txt, "# Formato: ID Nombre Latitud Longitud Dia Mes Año PM2.5 PM10 CO2 SO2 NO2 Temperatura Humedad Viento\n");
+    fprintf(txt, "# Unidades: PM2.5,PM10,SO2,NO2 (μg/m³), CO2 (ppm), Temperatura (°C), Humedad (%%), Viento (km/h)\n");
+    fprintf(txt, "# Limites OMS 2021: PM2.5≤15, PM10≤45, CO2≤1000, SO2≤40, NO2≤25\n");
+    
     fprintf(txt, "%d\n", sistema->num_zonas);
     for (int z = 0; z < sistema->num_zonas; z++) {
         ZonaMonitoreo *zona = &sistema->zonas[z];

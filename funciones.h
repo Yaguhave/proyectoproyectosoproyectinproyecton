@@ -34,14 +34,15 @@
 
 /*
  * LIMITES DE CONTAMINACION SEGUN LA ORGANIZACION MUNDIAL DE LA SALUD (OMS)
+ * Valores actualizados según las nuevas directrices de la OMS (2021)
  * Estos valores están en microgramos por metro cúbico (ug/m3)
  * Si los niveles superan estos límites, se considera peligroso para la salud
  */
-#define LIMITE_PM25 25.0      // Partículas finas menores a 2.5 micrómetros
-#define LIMITE_PM10 50.0      // Partículas menores a 10 micrómetros
-#define LIMITE_CO2 40000.0    // Dióxido de carbono (convertido de ppm a ug/m3)
-#define LIMITE_SO2 20.0       // Dióxido de azufre
-#define LIMITE_NO2 40.0       // Dióxido de nitrógeno
+#define LIMITE_PM25 15.0      // Partículas finas menores a 2.5 micrómetros (OMS 2021: promedio anual 15 μg/m³, diario 45 μg/m³)
+#define LIMITE_PM10 45.0      // Partículas menores a 10 micrómetros (OMS 2021: promedio anual 45 μg/m³, diario 100 μg/m³)
+#define LIMITE_CO2 1000.0     // Dióxido de carbono en espacios interiores (recomendación: <1000 ppm ≈ 1800 mg/m³)
+#define LIMITE_SO2 40.0       // Dióxido de azufre (OMS: promedio diario 40 μg/m³)
+#define LIMITE_NO2 25.0       // Dióxido de nitrógeno (OMS 2021: promedio anual 25 μg/m³, diario 50 μg/m³)
 
 /*
  * ESTRUCTURA: DatosContaminacion
