@@ -1,35 +1,27 @@
 /*
- * SISTEMA INTEGRAL DE GESTION DE CONTAMINACION DEL AIRE - QUITO
+ * SISTEMA DE GESTION DE CONTAMINACION DEL AIRE - QUITO
  * ARCHIVO PRINCIPAL (main.c)
  * 
- * Este es el archivo principal del programa que contiene la función main().
- * Aquí se ejecuta el menú principal y se coordinan todas las operaciones del sistema.
- * 
- * FLUJO DEL PROGRAMA:
- * 1. Inicializar el sistema con las 5 zonas de Quito
- * 2. Cargar datos guardados anteriormente (si existen)
- * 3. Mostrar menú principal y esperar selección del usuario
- * 4. Ejecutar la operación seleccionada
- * 5. Repetir hasta que el usuario elija salir
- * 6. Guardar datos antes de terminar el programa
+ * Este es el archivo principal que contiene la función main().
+ * Aquí se ejecuta el menú principal y se coordinan las operaciones.
  */
 
 #include "funciones.h"
 
 int main() {
-    // Declaración de variables principales
+    // Variables principales
     SistemaContaminacion sistema;                    // Estructura principal del sistema
     int opcion;                                      // Opción seleccionada por el usuario
     int zona_id;                                     // ID de zona para operaciones específicas
-    Recomendacion recomendaciones[10];               // Array para almacenar recomendaciones
-    int num_recomendaciones;                         // Contador de recomendaciones generadas
+    Recomendacion recomendaciones[10];               // Array para recomendaciones
+    int num_recomendaciones;                         // Contador de recomendaciones
     
-    // ========== INICIALIZACION DEL SISTEMA ==========
-    printf("Iniciando Sistema Integral de Gestion de Contaminacion del Aire...\n");
+    // Inicialización del sistema
+    printf("Iniciando Sistema de Gestion de Contaminacion del Aire...\n");
     printf("Configurando zonas de monitoreo en Quito...\n");
     inicializar_sistema(&sistema);                   // Configurar las 5 zonas de Quito
     
-    // Intentar cargar datos de sesiones anteriores
+    // Intentar cargar datos anteriores
     printf("Buscando datos guardados anteriormente...\n");
     cargar_datos_archivo(&sistema);
     
@@ -37,7 +29,7 @@ int main() {
     printf("Presione Enter para continuar...");
     getchar(); // Pausa para que el usuario lea la información
     
-    // ========== MENU PRINCIPAL DEL SISTEMA ========== 
+    // Menu principal del sistema
     do {
         mostrar_menu_principal();                    // Mostrar opciones disponibles
         printf("\n");
@@ -139,22 +131,22 @@ int main() {
                 printf("\nIngrese el ID de la zona (1-%d): ", sistema.num_zonas);
                 scanf("%d", &zona_id);
                 if (zona_id >= 1 && zona_id <= sistema.num_zonas) {
-                    // Generar recomendaciones basadas en los datos de la zona
+                    // Generar recomendaciones para la zona
                     generar_recomendaciones(&sistema, zona_id, recomendaciones, &num_recomendaciones);
                     
                     printf("\n=== RECOMENDACIONES PARA ZONA %d ===\n", zona_id);
                     if (num_recomendaciones == 0) {
                         printf("No se requieren recomendaciones especiales en este momento.\n");
-                        printf("Los niveles de contaminacion estan dentro de los limites normales.\n");
+                        printf("Los niveles estan dentro de los limites normales.\n");
                     } else {
-                        // Mostrar cada recomendación con su nivel de prioridad
+                        // Mostrar cada recomendación con su prioridad
                         for (int i = 0; i < num_recomendaciones; i++) {
                             char prioridad_str[20];
-                            // Convertir código de prioridad a texto comprensible
+                            // Convertir código de prioridad a texto
                             switch(recomendaciones[i].prioridad) {
-                                case 1: strcpy(prioridad_str, "ALTA"); break;      // Urgente
-                                case 2: strcpy(prioridad_str, "MEDIA"); break;     // Importante
-                                case 3: strcpy(prioridad_str, "BAJA"); break;      // Preventiva
+                                case 1: strcpy(prioridad_str, "ALTA"); break;
+                                case 2: strcpy(prioridad_str, "MEDIA"); break;
+                                case 3: strcpy(prioridad_str, "BAJA"); break;
                                 default: strcpy(prioridad_str, "DESCONOCIDA");
                             }
                             

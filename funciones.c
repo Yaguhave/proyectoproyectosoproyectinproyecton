@@ -26,12 +26,8 @@
  * dependencias externas. Implementan operaciones matemáticas básicas necesarias.
  */
 
-/**
- * Calcula la potencia de un número (base^exponente)
- * @param base: número base
- * @param exponente: exponente entero positivo
- * @return: resultado de base elevado a la potencia del exponente
- */
+// Calcula la potencia de un número (base^exponente)
+// Por ejemplo: potencia(2, 3) = 2*2*2 = 8
 float potencia(float base, int exponente) {
     float resultado = 1.0;
     // Multiplica la base por sí misma 'exponente' veces
@@ -41,11 +37,8 @@ float potencia(float base, int exponente) {
     return resultado;
 }
 
-/**
- * Calcula la raíz cuadrada de un número usando el método de Newton
- * @param numero: número del cual calcular la raíz cuadrada
- * @return: raíz cuadrada del número, o -1 si el número es negativo
- */
+// Calcula la raíz cuadrada de un número usando el método de Newton
+// Por ejemplo: raiz_cuadrada(9) = 3
 
 float raiz_cuadrada(float numero) {
     if (numero < 0) return -1; // Error: no se puede calcular raíz de número negativo
@@ -64,11 +57,8 @@ float raiz_cuadrada(float numero) {
     return x;
 }
 
-/**
- * Calcula el valor absoluto de un número (siempre positivo)
- * @param numero: número del cual obtener el valor absoluto
- * @return: valor absoluto del número
- */
+// Calcula el valor absoluto de un número (siempre positivo)
+// Por ejemplo: valor_absoluto(-5) = 5
 
 float valor_absoluto(float numero) {
     // Si es negativo, lo convierte a positivo; si ya es positivo, lo deja igual
@@ -81,11 +71,8 @@ float valor_absoluto(float numero) {
  * ============================================================================
  */
 
-/**
- * Inicializa el sistema de monitoreo con la configuración inicial
- * Configura las 5 zonas de monitoreo de Quito con sus coordenadas GPS reales
- * @param sistema: puntero al sistema principal que se va a inicializar
- */
+// Inicializa el sistema de monitoreo con la configuración inicial
+// Configura las 5 zonas de monitoreo de Quito con sus coordenadas GPS reales
 void inicializar_sistema(SistemaContaminacion *sistema) {
     // Inicializar contadores y timestamps
     sistema->num_zonas = 0;                          // Comenzar sin zonas registradas
@@ -100,105 +87,91 @@ void inicializar_sistema(SistemaContaminacion *sistema) {
     agregar_zona(sistema, 5, "Catedral Metropolitana", -0.2201, -78.5123); // Zona centro histórico
 }
 
-/**
- * Carga los datos guardados desde el archivo binario al sistema
- * Se ejecuta al inicio del programa para recuperar datos anteriores
- * @param sistema: puntero al sistema donde cargar los datos
- */
+// Carga los datos guardados desde el archivo al sistema
+// Se ejecuta al inicio del programa para recuperar datos anteriores
 void cargar_datos_archivo(SistemaContaminacion *sistema) {
-    // Solo trabajar con datos_iniciales.txt como fuente principal
-    FILE *txt = fopen("datos_iniciales.txt", "r");
-    if (txt == NULL) {
-        printf("No se encontro archivo de datos_iniciales.txt. Iniciando con datos vacios.\n");
+    FILE *archivo = fopen("datos_iniciales.txt", "r");
+    if (archivo == NULL) {
+        printf("No se encontro archivo de datos. Iniciando con datos vacios.\n");
         sistema->num_zonas = 0;
         return;
     }
     
-    // Leer número de zonas directamente
-    fscanf(txt, "%d", &sistema->num_zonas);
+    // Leer número de zonas
+    fscanf(archivo, "%d", &sistema->num_zonas);
     
-    int n = sistema->num_zonas;
     // Leer 7 días por cada zona
-    for (int z = 0; z < n; z++) {
+    for (int z = 0; z < sistema->num_zonas; z++) {
         ZonaMonitoreo *zona = &sistema->zonas[z];
         zona->num_registros_historicos = 0;
+        
         for (int d = 0; d < 7; d++) {
             int id, dia, mes, ano;
             char nombre[50];
             float lat, lon, pm25, pm10, co2, so2, no2, temp, hum, viento;
-            fscanf(txt, "%d %s %f %f %d %d %d %f %f %f %f %f %f %f %f %f",
+            
+            fscanf(archivo, "%d %s %f %f %d %d %d %f %f %f %f %f %f %f %f",
                 &id, nombre, &lat, &lon, &dia, &mes, &ano, &pm25, &pm10, &co2, &so2, &no2, &temp, &hum, &viento);
+            
             if (d == 0) {
                 zona->id = id;
                 strcpy(zona->nombre, nombre);
                 zona->latitud = lat;
                 zona->longitud = lon;
             }
-            DatosContaminacion *dat = &zona->historial[d];
-            dat->dia = dia;
-            dat->mes = mes;
-            dat->ano = ano;
-            dat->pm25 = pm25;
-            dat->pm10 = pm10;
-            dat->co2 = co2;
-            dat->so2 = so2;
-            dat->no2 = no2;
-            dat->temperatura = temp;
-            dat->humedad = hum;
-            dat->velocidad_viento = viento;
+            
+            DatosContaminacion *dato = &zona->historial[d];
+            dato->dia = dia;
+            dato->mes = mes;
+            dato->ano = ano;
+            dato->pm25 = pm25;
+            dato->pm10 = pm10;
+            dato->co2 = co2;
+            dato->so2 = so2;
+            dato->no2 = no2;
+            dato->temperatura = temp;
+            dato->humedad = hum;
+            dato->velocidad_viento = viento;
             zona->num_registros_historicos++;
         }
         zona->datos_actuales = zona->historial[6]; // El último día es el actual
         predecir_contaminacion_24h(zona);
     }
-    fclose(txt);
+    fclose(archivo);
     sistema->ultima_actualizacion = time(NULL);
-    printf("Datos cargados exitosamente desde datos_iniciales.txt.\n");
-    return;
+    printf("Datos cargados exitosamente.\n");
 }
 
-/**
- * Guarda todos los datos del sistema en un archivo binario
- * Se ejecuta automáticamente después de cambios importantes
- * @param sistema: puntero al sistema cuyos datos se van a guardar
- */
+// Guarda todos los datos del sistema en un archivo
+// Se ejecuta automáticamente después de cambios importantes
 void guardar_datos_archivo(SistemaContaminacion *sistema) {
-    // Guardar datos en datos_iniciales.txt (sobrescribe)
-    FILE *txt = fopen("datos_iniciales.txt", "w");
-    if (txt == NULL) {
-        printf("Error al crear archivo de datos_iniciales.txt.\n");
+    FILE *archivo = fopen("datos_iniciales.txt", "w");
+    if (archivo == NULL) {
+        printf("Error al crear archivo de datos.\n");
         return;
     }
     
-    // Escribir encabezado explicativo
-    fprintf(txt, "# DATOS INICIALES SISTEMA DE CONTAMINACION DEL AIRE - QUITO\n");
-    fprintf(txt, "# Formato: ID Nombre Latitud Longitud Dia Mes Año PM2.5 PM10 CO2 SO2 NO2 Temperatura Humedad Viento\n");
-    fprintf(txt, "# Unidades: PM2.5,PM10,SO2,NO2 (μg/m³), CO2 (ppm), Temperatura (°C), Humedad (%%), Viento (km/h)\n");
-    fprintf(txt, "# Limites OMS 2021: PM2.5≤15, PM10≤45, CO2≤1000, SO2≤40, NO2≤25\n");
+    // Escribir encabezado simple
+    fprintf(archivo, "# Datos del Sistema de Contaminacion - Quito\n");
+    fprintf(archivo, "# Limites OMS 2021: PM2.5≤15, PM10≤45, CO2≤1000, SO2≤40, NO2≤25\n");
     
-    fprintf(txt, "%d\n", sistema->num_zonas);
+    fprintf(archivo, "%d\n", sistema->num_zonas);
+    
     for (int z = 0; z < sistema->num_zonas; z++) {
         ZonaMonitoreo *zona = &sistema->zonas[z];
         for (int d = 0; d < zona->num_registros_historicos; d++) {
-            DatosContaminacion *dat = &zona->historial[d];
-            fprintf(txt, "%d %s %.4f %.4f %d %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+            DatosContaminacion *dato = &zona->historial[d];
+            fprintf(archivo, "%d %s %.4f %.4f %d %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
                 zona->id, zona->nombre, zona->latitud, zona->longitud,
-                dat->dia, dat->mes, dat->ano, dat->pm25, dat->pm10, dat->co2, dat->so2, dat->no2,
-                dat->temperatura, dat->humedad, dat->velocidad_viento);
+                dato->dia, dato->mes, dato->ano, dato->pm25, dato->pm10, dato->co2, 
+                dato->so2, dato->no2, dato->temperatura, dato->humedad, dato->velocidad_viento);
         }
     }
-    fclose(txt);
-    printf("Datos guardados exitosamente en datos_iniciales.txt.\n");
+    fclose(archivo);
+    printf("Datos guardados exitosamente.\n");
 }
 
-/**
- * Agrega una nueva zona de monitoreo al sistema
- * @param sistema: puntero al sistema principal
- * @param id: identificador único de la zona (1-5)
- * @param nombre: nombre descriptivo de la zona
- * @param lat: coordenada de latitud GPS
- * @param lng: coordenada de longitud GPS
- */
+// Agrega una nueva zona de monitoreo al sistema
 void agregar_zona(SistemaContaminacion *sistema, int id, char *nombre, float lat, float lng) {
     // Verificar que no se exceda el límite máximo de zonas
     if (sistema->num_zonas >= MAX_ZONAS) {
@@ -239,12 +212,8 @@ void agregar_zona(SistemaContaminacion *sistema, int id, char *nombre, float lat
     sistema->num_zonas++;
 }
 
-/**
- * Permite al usuario ingresar datos actuales de contaminación para una zona específica
- * Esta función es interactiva y solicita al usuario todos los valores necesarios
- * @param sistema: puntero al sistema principal
- * @param zona_id: ID de la zona para la cual ingresar datos
- */
+// Permite al usuario ingresar datos actuales de contaminación para una zona específica
+// Esta función es interactiva y solicita al usuario todos los valores necesarios
 void ingresar_datos_actuales(SistemaContaminacion *sistema, int zona_id) {
     ZonaMonitoreo *zona = NULL;
     
@@ -550,77 +519,30 @@ void generar_recomendaciones(SistemaContaminacion *sistema, int zona_id, Recomen
  * ============================================================================
  */
 
-/**
- * Valida que un valor numérico esté en el rango permitido
- * @param valor: puntero al valor a validar
- * @param min: valor mínimo permitido
- * @param max: valor máximo permitido
- * @param puede_ser_negativo: 1 si puede ser negativo, 0 si no
- * @return: 1 si es válido, 0 si no es válido
- */
-int validar_entrada_numerica(float *valor, float min, float max, int puede_ser_negativo) {
-    // Verificar si puede ser negativo
-    if (!puede_ser_negativo && *valor < 0) {
-        printf("ERROR: El valor no puede ser negativo.\n");
-        return 0;
-    }
-    
-    // Verificar rango
-    if (*valor < min || *valor > max) {
-        if (puede_ser_negativo) {
-            printf("ERROR: El valor debe estar entre %.2f y %.2f.\n", min, max);
-        } else {
-            printf("ERROR: El valor debe estar entre %.2f y %.2f (no negativo).\n", min, max);
-        }
-        return 0;
-    }
-    
-    return 1;
-}
 
-/**
- * Lee un número flotante del usuario con validación automática
- * @param valor: puntero donde almacenar el valor leído
- * @param mensaje: mensaje a mostrar al usuario
- * @param min: valor mínimo permitido
- * @param max: valor máximo permitido
- * @param puede_ser_negativo: 1 si puede ser negativo, 0 si no
- * @return: 1 si se leyó exitosamente, 0 si se canceló
- */
+// Lee un número flotante del usuario con validación simple
 int leer_float_validado(float *valor, char *mensaje, float min, float max, int puede_ser_negativo) {
-    char buffer[100];
-    char *endptr;
     int intentos = 0;
-    const int max_intentos = 3;
     
-    while (intentos < max_intentos) {
+    while (intentos < 3) {
         printf("%s", mensaje);
+        scanf("%f", valor);
         
-        // Leer como string para validar mejor
-        if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
-            printf("ERROR: Error al leer la entrada.\n");
+        // Verificar si puede ser negativo
+        if (!puede_ser_negativo && *valor < 0) {
+            printf("ERROR: El valor no puede ser negativo.\n");
             intentos++;
             continue;
         }
         
-        // Intentar convertir a float
-        *valor = strtof(buffer, &endptr);
-        
-        // Verificar si la conversión fue exitosa
-        if (endptr == buffer || (*endptr != '\n' && *endptr != '\0')) {
-            printf("ERROR: Debe ingresar un numero valido. Intento %d de %d.\n", 
-                   intentos + 1, max_intentos);
+        // Verificar rango
+        if (*valor < min || *valor > max) {
+            printf("ERROR: El valor debe estar entre %.2f y %.2f.\n", min, max);
             intentos++;
             continue;
         }
         
-        // Validar el rango
-        if (validar_entrada_numerica(valor, min, max, puede_ser_negativo)) {
-            return 1; // Éxito
-        }
-        
-        intentos++;
-        printf("Intento %d de %d.\n", intentos, max_intentos);
+        return 1; // Éxito
     }
     
     printf("Se agotaron los intentos. Usando valor por defecto: %.2f\n", min);
@@ -634,11 +556,7 @@ int leer_float_validado(float *valor, char *mensaje, float min, float max, int p
  * ============================================================================
  */
 
-/**
- * Permite editar los datos de contaminación actuales de una zona específica
- * @param sistema: puntero al sistema principal
- * @param zona_id: ID de la zona a editar
- */
+// Permite editar los datos de contaminación actuales de una zona específica
 void editar_datos_zona(SistemaContaminacion *sistema, int zona_id) {
     ZonaMonitoreo *zona = NULL;
     
@@ -750,12 +668,7 @@ void editar_datos_zona(SistemaContaminacion *sistema, int zona_id) {
     predecir_contaminacion_24h(zona);
 }
 
-/**
- * Elimina completamente una zona del sistema de monitoreo
- * @param sistema: puntero al sistema principal
- * @param zona_id: ID de la zona a eliminar
- * @return: 1 si se eliminó exitosamente, 0 si no se encontró o hubo error
- */
+// Elimina completamente una zona del sistema de monitoreo
 int eliminar_zona(SistemaContaminacion *sistema, int zona_id) {
     int indice_zona = -1;
     
@@ -822,11 +735,7 @@ int eliminar_zona(SistemaContaminacion *sistema, int zona_id) {
     return 1;
 }
 
-/**
- * Permite al usuario editar el nombre y coordenadas GPS de una zona existente
- * @param sistema: puntero al sistema principal
- * @param zona_id: ID de la zona a editar
- */
+// Permite al usuario editar el nombre y coordenadas GPS de una zona existente
 void editar_zona(SistemaContaminacion *sistema, int zona_id) {
     ZonaMonitoreo *zona = NULL;
     
@@ -883,11 +792,8 @@ void editar_zona(SistemaContaminacion *sistema, int zona_id) {
  * ============================================================================
  */
 
-/**
- * Genera un reporte completo de la situación actual de contaminación del aire
- * Incluye datos actuales, predicciones, promedios históricos e índice de calidad del aire
- * @param sistema: puntero al sistema del cual generar el reporte
- */
+// Genera un reporte completo de la situación actual de contaminación del aire
+// Incluye datos actuales, predicciones, promedios históricos e índice de calidad del aire
 void generar_reporte_completo(SistemaContaminacion *sistema) {
     FILE *archivo = fopen(ARCHIVO_REPORTE, "w");
     if (archivo == NULL) {
