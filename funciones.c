@@ -1,956 +1,65 @@
-/*
- * SISTEMA INTEGRAL DE GESTION DE CONTAMINACION DEL AIRE - QUITO
- * ARCHIVO DE IMPLEMENTACION DE FUNCIONES
- * 
- * Este archivo contiene la implementación real de todas las funciones declaradas
- * en funciones.h. Aquí está la lógica completa del sistema de monitoreo.
- * 
- * ORGANIZACION DEL ARCHIVO:
- * 1. Funciones matemáticas auxiliares (reemplazan la librería math.h)
- * 2. Funciones principales del sistema (inicialización, carga/guardado)
- * 3. Funciones de análisis y predicción
- * 4. Funciones de alertas y recomendaciones
- * 5. Funciones de reportes y exportación
- * 6. Funciones de interfaz de usuario
- * 7. Funciones auxiliares y utilidades
- */
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
 #include "funciones.h"
 
-/*
- * ============================================================================
- * FUNCIONES MATEMATICAS AUXILIARES
- * ============================================================================
- * 
- * Estas funciones reemplazan funciones de la librería math.h para evitar
- * dependencias externas. Implementan operaciones matemáticas básicas necesarias.
- */
+#define ARCHIVO_DATOS "datos_zonas.txt"
+#define ARCHIVO_RESPALDO "respaldo_zonas.txt"
 
-// Calcula la potencia de un número (base^exponente)
-// Por ejemplo: potencia(2, 3) = 2*2*2 = 8
-float potencia(float base, int exponente) {
-    float resultado = 1.0;
-    // Multiplica la base por sí misma 'exponente' veces
-    for (int i = 0; i < exponente; i++) {
-        resultado *= base;
-    }
-    return resultado;
-}
-
-// Calcula la raíz cuadrada de un número usando el método de Newton
-// Por ejemplo: raiz_cuadrada(9) = 3
-
-float raiz_cuadrada(float numero) {
-    if (numero < 0) return -1; // Error: no se puede calcular raíz de número negativo
-    if (numero == 0) return 0; // Caso especial: raíz de 0 es 0
-    
-    // Algoritmo de Newton para aproximar la raíz cuadrada
-    float x = numero;                    // Estimación inicial
-    float y = 1.0;                      // Segunda estimación
-    float epsilon = 0.000001;           // Precisión deseada
-    
-    // Itera hasta alcanzar la precisión deseada
-    while (x - y > epsilon) {
-        x = (x + y) / 2;                // Nueva estimación (promedio)
-        y = numero / x;                 // Ajuste basado en el número original
-    }
-    return x;
-}
-
-// Calcula el valor absoluto de un número (siempre positivo)
-// Por ejemplo: valor_absoluto(-5) = 5
-
-float valor_absoluto(float numero) {
-    // Si es negativo, lo convierte a positivo; si ya es positivo, lo deja igual
-    return (numero < 0) ? -numero : numero;
-}
-
-/*
- * ============================================================================
- * FUNCIONES PRINCIPALES DEL SISTEMA
- * ============================================================================
- */
-
-// Inicializa el sistema de monitoreo con la configuración inicial
-// Configura las 5 zonas de monitoreo de Quito con sus coordenadas GPS reales
-void inicializar_sistema(SistemaContaminacion *sistema) {
-    // Inicializar contadores y timestamps
-    sistema->num_zonas = 0;                          // Comenzar sin zonas registradas
-    sistema->ultima_actualizacion = time(NULL);      // Marcar la hora de inicialización
-    
-    // Agregar las 5 zonas específicas de Quito con sus coordenadas GPS reales
-    // Estas coordenadas corresponden a ubicaciones estratégicas de la ciudad
-    agregar_zona(sistema, 1, "Sector Udlapark", -0.2298, -78.5249);        // Zona norte
-    agregar_zona(sistema, 2, "Mitad del Mundo", -0.0022, -78.4558);        // Zona norte extrema
-    agregar_zona(sistema, 3, "Parque la Carolina", -0.1807, -78.4678);     // Zona centro-norte
-    agregar_zona(sistema, 4, "El Panecillo", -0.2274, -78.5170);           // Zona centro histórico
-    agregar_zona(sistema, 5, "Catedral Metropolitana", -0.2201, -78.5123); // Zona centro histórico
-}
-
-// Carga los datos guardados desde el archivo al sistema
-// Se ejecuta al inicio del programa para recuperar datos anteriores
-void cargar_datos_archivo(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen("datos_iniciales.txt", "r");
-    if (archivo == NULL) {
-        printf("No se encontro archivo de datos. Iniciando con datos vacios.\n");
-        sistema->num_zonas = 0;
-        return;
-    }
-    
+// Carga los datos desde un archivo de texto
+int cargar_zonas(Zona zonas[], int *num_zonas) {
+    FILE *f = fopen(ARCHIVO_DATOS, "r");
+    if (!f) return 0;
     // Leer número de zonas
-    fscanf(archivo, "%d", &sistema->num_zonas);
-    
-    // Leer 7 días por cada zona
-    for (int z = 0; z < sistema->num_zonas; z++) {
-        ZonaMonitoreo *zona = &sistema->zonas[z];
-        zona->num_registros_historicos = 0;
-        
-        for (int d = 0; d < 7; d++) {
-            int id, dia, mes, ano;
-            char nombre[50];
-            float lat, lon, pm25, pm10, co2, so2, no2, temp, hum, viento;
-            
-            fscanf(archivo, "%d %s %f %f %d %d %d %f %f %f %f %f %f %f %f",
-                &id, nombre, &lat, &lon, &dia, &mes, &ano, &pm25, &pm10, &co2, &so2, &no2, &temp, &hum, &viento);
-            
-            if (d == 0) {
-                zona->id = id;
-                strcpy(zona->nombre, nombre);
-                zona->latitud = lat;
-                zona->longitud = lon;
-            }
-            
-            DatosContaminacion *dato = &zona->historial[d];
-            dato->dia = dia;
-            dato->mes = mes;
-            dato->ano = ano;
-            dato->pm25 = pm25;
-            dato->pm10 = pm10;
-            dato->co2 = co2;
-            dato->so2 = so2;
-            dato->no2 = no2;
-            dato->temperatura = temp;
-            dato->humedad = hum;
-            dato->velocidad_viento = viento;
-            zona->num_registros_historicos++;
-        }
-        zona->datos_actuales = zona->historial[6]; // El último día es el actual
-        predecir_contaminacion_24h(zona);
-    }
-    fclose(archivo);
-    sistema->ultima_actualizacion = time(NULL);
-    printf("Datos cargados exitosamente.\n");
-}
-
-// Guarda todos los datos del sistema en un archivo
-// Se ejecuta automáticamente después de cambios importantes
-void guardar_datos_archivo(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen("datos_iniciales.txt", "w");
-    if (archivo == NULL) {
-        printf("Error al crear archivo de datos.\n");
-        return;
-    }
-    
-    // Escribir encabezado simple
-    fprintf(archivo, "# Datos del Sistema de Contaminacion - Quito\n");
-    fprintf(archivo, "# Limites OMS 2021: PM2.5≤15, PM10≤45, CO2≤1000, SO2≤40, NO2≤25\n");
-    
-    fprintf(archivo, "%d\n", sistema->num_zonas);
-    
-    for (int z = 0; z < sistema->num_zonas; z++) {
-        ZonaMonitoreo *zona = &sistema->zonas[z];
-        for (int d = 0; d < zona->num_registros_historicos; d++) {
-            DatosContaminacion *dato = &zona->historial[d];
-            fprintf(archivo, "%d %s %.4f %.4f %d %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
-                zona->id, zona->nombre, zona->latitud, zona->longitud,
-                dato->dia, dato->mes, dato->ano, dato->pm25, dato->pm10, dato->co2, 
-                dato->so2, dato->no2, dato->temperatura, dato->humedad, dato->velocidad_viento);
-        }
-    }
-    fclose(archivo);
-    printf("Datos guardados exitosamente.\n");
-}
-
-// Agrega una nueva zona de monitoreo al sistema
-void agregar_zona(SistemaContaminacion *sistema, int id, char *nombre, float lat, float lng) {
-    // Verificar que no se exceda el límite máximo de zonas
-    if (sistema->num_zonas >= MAX_ZONAS) {
-        printf("No se pueden agregar más zonas. Límite alcanzado (%d zonas).\n", MAX_ZONAS);
-        return;
-    }
-    
-    // Obtener referencia a la nueva zona en el array
-    ZonaMonitoreo *zona = &sistema->zonas[sistema->num_zonas];
-    
-    // Configurar información básica de la zona
-    zona->id = id;                              // Asignar ID único
-    strcpy(zona->nombre, nombre);               // Copiar nombre de la zona
-    zona->latitud = lat;                        // Coordenada GPS de latitud
-    zona->longitud = lng;                       // Coordenada GPS de longitud
-    zona->num_registros_historicos = 0;         // Inicializar sin historial
-    
-    // Inicializar datos actuales con valores por defecto (cero)
-    // Esto indica que aún no se han ingresado datos reales
-    zona->datos_actuales.dia = 0;
-    zona->datos_actuales.mes = 0;
-    zona->datos_actuales.ano = 0;
-    zona->datos_actuales.pm25 = 0.0;
-    zona->datos_actuales.pm10 = 0.0;
-    zona->datos_actuales.co2 = 0.0;
-    zona->datos_actuales.so2 = 0.0;
-    zona->datos_actuales.no2 = 0.0;
-    zona->datos_actuales.temperatura = 0.0;
-    zona->datos_actuales.humedad = 0.0;
-    zona->datos_actuales.velocidad_viento = 0.0;
-    
-    // Inicializar predicciones con valores por defecto
-    for (int i = 0; i < 5; i++) {
-        zona->prediccion_24h[i] = 0.0;
-    }
-    
-    // Incrementar el contador de zonas del sistema
-    sistema->num_zonas++;
-}
-
-// Permite al usuario ingresar datos actuales de contaminación para una zona específica
-// Esta función es interactiva y solicita al usuario todos los valores necesarios
-void ingresar_datos_actuales(SistemaContaminacion *sistema, int zona_id) {
-    ZonaMonitoreo *zona = NULL;
-    
-    // Buscar la zona
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            zona = &sistema->zonas[i];
-            break;
-        }
-    }
-    
-    if (zona == NULL) {
-        printf("Zona no encontrada.\n");
-        return;
-    }
-    
-    printf("\n=== Ingreso de datos para zona: %s ===\n", zona->nombre);
-    
-    // Obtener fecha actual
-    int dia, mes, ano;
-    obtener_fecha_actual(&dia, &mes, &ano);
-    
-    zona->datos_actuales.dia = dia;
-    zona->datos_actuales.mes = mes;
-    zona->datos_actuales.ano = ano;
-    
-    printf("Ingrese los siguientes datos de contaminacion:\n");
-    leer_float_validado(&zona->datos_actuales.pm25, "PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
-    leer_float_validado(&zona->datos_actuales.pm10, "PM10 (ug/m3): ", 0.0, 1000.0, 0);
-    leer_float_validado(&zona->datos_actuales.co2, "CO2 (ug/m3): ", 0.0, 100000.0, 0);
-    leer_float_validado(&zona->datos_actuales.so2, "SO2 (ug/m3): ", 0.0, 1000.0, 0);
-    leer_float_validado(&zona->datos_actuales.no2, "NO2 (ug/m3): ", 0.0, 1000.0, 0);
-    leer_float_validado(&zona->datos_actuales.temperatura, "Temperatura (C): ", -50.0, 60.0, 1);
-    leer_float_validado(&zona->datos_actuales.humedad, "Humedad (%): ", 0.0, 100.0, 0);
-    leer_float_validado(&zona->datos_actuales.velocidad_viento, "Velocidad del viento (km/h): ", 0.0, 200.0, 0);
-    
-    printf("Datos ingresados exitosamente.\n");
-    
-    // Actualizar predicción
-    predecir_contaminacion_24h(zona);
-}
-
-// Función para agregar datos al historial
-void agregar_datos_historicos(SistemaContaminacion *sistema, int zona_id, DatosContaminacion datos) {
-    ZonaMonitoreo *zona = NULL;
-    
-    // Buscar la zona
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            zona = &sistema->zonas[i];
-            break;
-        }
-    }
-    
-    if (zona == NULL) return;
-    
-    // Si el historial está lleno, mover todos los elementos hacia atrás
-    if (zona->num_registros_historicos >= MAX_DIAS_HISTORICOS) {
-        for (int i = 0; i < MAX_DIAS_HISTORICOS - 1; i++) {
-            zona->historial[i] = zona->historial[i + 1];
-        }
-        zona->historial[MAX_DIAS_HISTORICOS - 1] = datos;
-    } else {
-        zona->historial[zona->num_registros_historicos] = datos;
-        zona->num_registros_historicos++;
-    }
-}
-
-// Función para calcular promedio histórico de un contaminante
-float calcular_promedio_historico(ZonaMonitoreo *zona, int tipo_contaminante) {
-    if (zona->num_registros_historicos == 0) return 0.0;
-    
-    float suma = 0.0;
-    for (int i = 0; i < zona->num_registros_historicos; i++) {
-        switch (tipo_contaminante) {
-            case 0: suma += zona->historial[i].pm25; break;
-            case 1: suma += zona->historial[i].pm10; break;
-            case 2: suma += zona->historial[i].co2; break;
-            case 3: suma += zona->historial[i].so2; break;
-            case 4: suma += zona->historial[i].no2; break;
-        }
-    }
-    
-    return suma / zona->num_registros_historicos;
-}
-
-// Función para predecir contaminación en 24h usando promedio ponderado
-void predecir_contaminacion_24h(ZonaMonitoreo *zona) {
-    if (zona->num_registros_historicos == 0) {
-        // Sin historial, usar datos actuales como predicción
-        zona->prediccion_24h[0] = zona->datos_actuales.pm25;
-        zona->prediccion_24h[1] = zona->datos_actuales.pm10;
-        zona->prediccion_24h[2] = zona->datos_actuales.co2;
-        zona->prediccion_24h[3] = zona->datos_actuales.so2;
-        zona->prediccion_24h[4] = zona->datos_actuales.no2;
-        return;
-    }
-    
-    // Calcular promedio ponderado (más peso a días recientes)
-    float pesos_total = 0.0;
-    for (int tipo = 0; tipo < 5; tipo++) {
-        float suma_ponderada = 0.0;
-        pesos_total = 0.0;
-        
-        for (int i = 0; i < zona->num_registros_historicos; i++) {
-            // Peso mayor para días más recientes
-            float peso = 1.0 + (float)i / zona->num_registros_historicos;
-            float valor = 0.0;
-            
-            switch (tipo) {
-                case 0: valor = zona->historial[i].pm25; break;
-                case 1: valor = zona->historial[i].pm10; break;
-                case 2: valor = zona->historial[i].co2; break;
-                case 3: valor = zona->historial[i].so2; break;
-                case 4: valor = zona->historial[i].no2; break;
-            }
-            
-            suma_ponderada += valor * peso;
-            pesos_total += peso;
-        }
-        
-        float prediccion_base = suma_ponderada / pesos_total;
-        
-        // Aplicar factor climático
-        zona->prediccion_24h[tipo] = aplicar_factor_climatico(
-            prediccion_base,
-            zona->datos_actuales.temperatura,
-            zona->datos_actuales.humedad,
-            zona->datos_actuales.velocidad_viento
-        );
-    }
-}
-
-// Función para verificar límites actuales
-int verificar_limites_actuales(DatosContaminacion *datos) {
-    int excede = 0;
-    
-    if (datos->pm25 > LIMITE_PM25) excede = 1;
-    if (datos->pm10 > LIMITE_PM10) excede = 1;
-    if (datos->co2 > LIMITE_CO2) excede = 1;
-    if (datos->so2 > LIMITE_SO2) excede = 1;
-    if (datos->no2 > LIMITE_NO2) excede = 1;
-    
-    return excede;
-}
-
-// Función para verificar límites de predicción
-int verificar_limites_prediccion(float *prediccion) {
-    int excede = 0;
-    
-    if (prediccion[0] > LIMITE_PM25) excede = 1;
-    if (prediccion[1] > LIMITE_PM10) excede = 1;
-    if (prediccion[2] > LIMITE_CO2) excede = 1;
-    if (prediccion[3] > LIMITE_SO2) excede = 1;
-    if (prediccion[4] > LIMITE_NO2) excede = 1;
-    
-    return excede;
-}
-
-// Función para generar alertas del sistema
-void generar_alertas(SistemaContaminacion *sistema) {
-    printf("\n=== SISTEMA DE ALERTAS ===\n");
-    int alertas_generadas = 0;
-    
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        ZonaMonitoreo *zona = &sistema->zonas[i];
-        
-        // Verificar límites actuales
-        if (verificar_limites_actuales(&zona->datos_actuales)) {
-            printf("\nALERTA ACTUAL - Zona: %s\n", zona->nombre);
-            
-            if (zona->datos_actuales.pm25 > LIMITE_PM25) {
-                mostrar_alerta(zona->id, zona->nombre, "PM2.5", zona->datos_actuales.pm25, LIMITE_PM25);
-            }
-            if (zona->datos_actuales.pm10 > LIMITE_PM10) {
-                mostrar_alerta(zona->id, zona->nombre, "PM10", zona->datos_actuales.pm10, LIMITE_PM10);
-            }
-            if (zona->datos_actuales.co2 > LIMITE_CO2) {
-                mostrar_alerta(zona->id, zona->nombre, "CO2", zona->datos_actuales.co2, LIMITE_CO2);
-            }
-            if (zona->datos_actuales.so2 > LIMITE_SO2) {
-                mostrar_alerta(zona->id, zona->nombre, "SO2", zona->datos_actuales.so2, LIMITE_SO2);
-            }
-            if (zona->datos_actuales.no2 > LIMITE_NO2) {
-                mostrar_alerta(zona->id, zona->nombre, "NO2", zona->datos_actuales.no2, LIMITE_NO2);
-            }
-            alertas_generadas++;
-        }
-        
-        // Verificar límites de predicción
-        if (verificar_limites_prediccion(zona->prediccion_24h)) {
-            printf("\nALERTA PREVENTIVA (24h) - Zona: %s\n", zona->nombre);
-            
-            if (zona->prediccion_24h[0] > LIMITE_PM25) {
-                mostrar_alerta(zona->id, zona->nombre, "PM2.5 (prediccion)", zona->prediccion_24h[0], LIMITE_PM25);
-            }
-            if (zona->prediccion_24h[1] > LIMITE_PM10) {
-                mostrar_alerta(zona->id, zona->nombre, "PM10 (prediccion)", zona->prediccion_24h[1], LIMITE_PM10);
-            }
-            if (zona->prediccion_24h[2] > LIMITE_CO2) {
-                mostrar_alerta(zona->id, zona->nombre, "CO2 (prediccion)", zona->prediccion_24h[2], LIMITE_CO2);
-            }
-            if (zona->prediccion_24h[3] > LIMITE_SO2) {
-                mostrar_alerta(zona->id, zona->nombre, "SO2 (prediccion)", zona->prediccion_24h[3], LIMITE_SO2);
-            }
-            if (zona->prediccion_24h[4] > LIMITE_NO2) {
-                mostrar_alerta(zona->id, zona->nombre, "NO2 (prediccion)", zona->prediccion_24h[4], LIMITE_NO2);
-            }
-            alertas_generadas++;
-        }
-    }
-    
-    if (alertas_generadas == 0) {
-        printf("No hay alertas en este momento. Todos los niveles estan dentro de los limites aceptables.\n");
-    }
-}
-
-// Función para mostrar alerta individual
-void mostrar_alerta(int zona_id, char *nombre_zona, char *contaminante, float valor, float limite) {
-    printf("   ALERTA: %s: %.2f ug/m3 (Limite: %.2f ug/m3)\n", contaminante, valor, limite);
-    printf("   Exceso: %.2f ug/m3 (%.1f%% sobre el limite)\n", 
-           valor - limite, ((valor - limite) / limite) * 100);
-}
-
-// Función para generar recomendaciones específicas
-void generar_recomendaciones(SistemaContaminacion *sistema, int zona_id, Recomendacion *recomendaciones, int *num_recomendaciones) {
-    *num_recomendaciones = 0;
-    
-    ZonaMonitoreo *zona = NULL;
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            zona = &sistema->zonas[i];
-            break;
-        }
-    }
-    
-    if (zona == NULL) return;
-    
-    // Verificar PM2.5
-    if (zona->datos_actuales.pm25 > LIMITE_PM25 || zona->prediccion_24h[0] > LIMITE_PM25) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Reducir trafico vehicular en zona urbana. Implementar dias sin carro.");
-        recomendaciones[*num_recomendaciones].prioridad = 1;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Trafico");
-        (*num_recomendaciones)++;
-        
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Evitar actividades fisicas intensas al aire libre, especialmente grupos vulnerables.");
-        recomendaciones[*num_recomendaciones].prioridad = 1;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Salud Publica");
-        (*num_recomendaciones)++;
-    }
-    
-    // Verificar PM10
-    if (zona->datos_actuales.pm10 > LIMITE_PM10 || zona->prediccion_24h[1] > LIMITE_PM10) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Implementar riegos de vias publicas para reducir polvo suspendido.");
-        recomendaciones[*num_recomendaciones].prioridad = 2;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Salud Publica");
-        (*num_recomendaciones)++;
-    }
-    
-    // Verificar CO2
-    if (zona->datos_actuales.co2 > LIMITE_CO2 || zona->prediccion_24h[2] > LIMITE_CO2) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Promover uso de transporte publico y bicicletas. Implementar zonas peatonales.");
-        recomendaciones[*num_recomendaciones].prioridad = 2;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Trafico");
-        (*num_recomendaciones)++;
-    }
-    
-    // Verificar SO2
-    if (zona->datos_actuales.so2 > LIMITE_SO2 || zona->prediccion_24h[3] > LIMITE_SO2) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Inspeccionar industrias cercanas. Implementar filtros de emisiones.");
-        recomendaciones[*num_recomendaciones].prioridad = 1;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Industrial");
-        (*num_recomendaciones)++;
-    }
-    
-    // Verificar NO2
-    if (zona->datos_actuales.no2 > LIMITE_NO2 || zona->prediccion_24h[4] > LIMITE_NO2) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Optimizar semaforos para reducir tiempo de espera de vehiculos.");
-        recomendaciones[*num_recomendaciones].prioridad = 2;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Trafico");
-        (*num_recomendaciones)++;
-    }
-    
-    // Recomendaciones generales basadas en condiciones climáticas
-    if (zona->datos_actuales.velocidad_viento < 5.0) {
-        strcpy(recomendaciones[*num_recomendaciones].descripcion, 
-               "Condiciones de viento bajo favorecen acumulacion de contaminantes. Monitoreo frecuente.");
-        recomendaciones[*num_recomendaciones].prioridad = 3;
-        strcpy(recomendaciones[*num_recomendaciones].categoria, "Salud Publica");
-        (*num_recomendaciones)++;
-    }
-}
-
-/*
- * ============================================================================
- * FUNCIONES DE VALIDACION DE ENTRADA
- * ============================================================================
- */
-
-
-// Lee un número flotante del usuario con validación simple
-int leer_float_validado(float *valor, char *mensaje, float min, float max, int puede_ser_negativo) {
-    int intentos = 0;
-    
-    while (intentos < 3) {
-        printf("%s", mensaje);
-        scanf("%f", valor);
-        
-        // Verificar si puede ser negativo
-        if (!puede_ser_negativo && *valor < 0) {
-            printf("ERROR: El valor no puede ser negativo.\n");
-            intentos++;
-            continue;
-        }
-        
-        // Verificar rango
-        if (*valor < min || *valor > max) {
-            printf("ERROR: El valor debe estar entre %.2f y %.2f.\n", min, max);
-            intentos++;
-            continue;
-        }
-        
-        return 1; // Éxito
-    }
-    
-    printf("Se agotaron los intentos. Usando valor por defecto: %.2f\n", min);
-    *valor = min;
-    return 0;
-}
-
-/*
- * ============================================================================
- * FUNCIONES DE EDICION Y ELIMINACION DE ZONAS
- * ============================================================================
- */
-
-// Permite editar los datos de contaminación actuales de una zona específica
-void editar_datos_zona(SistemaContaminacion *sistema, int zona_id) {
-    ZonaMonitoreo *zona = NULL;
-    
-    // Buscar la zona
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            zona = &sistema->zonas[i];
-            break;
-        }
-    }
-    
-    if (zona == NULL) {
-        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
-        return;
-    }
-    
-    printf("\n=== EDICION DE DATOS - ZONA: %s ===\n", zona->nombre);
-    
-    // Mostrar datos actuales
-    if (zona->datos_actuales.dia != 0) {
-        printf("\nDATOS ACTUALES:\n");
-        printf("PM2.5: %.2f ug/m3\n", zona->datos_actuales.pm25);
-        printf("PM10: %.2f ug/m3\n", zona->datos_actuales.pm10);
-        printf("CO2: %.2f ug/m3\n", zona->datos_actuales.co2);
-        printf("SO2: %.2f ug/m3\n", zona->datos_actuales.so2);
-        printf("NO2: %.2f ug/m3\n", zona->datos_actuales.no2);
-        printf("Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
-        printf("Humedad: %.1f%%\n", zona->datos_actuales.humedad);
-        printf("Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
-    } else {
-        printf("Esta zona aun no tiene datos registrados.\n");
-    }
-    
-    printf("\n¿Que desea editar?\n");
-    printf("1. PM2.5\n");
-    printf("2. PM10\n");
-    printf("3. CO2\n");
-    printf("4. SO2\n");
-    printf("5. NO2\n");
-    printf("6. Temperatura\n");
-    printf("7. Humedad\n");
-    printf("8. Velocidad del viento\n");
-    printf("9. Todos los valores\n");
-    printf("0. Cancelar\n");
-    printf("Seleccione una opcion: ");
-    
-    int opcion;
-    scanf("%d", &opcion);
-    
-    // Guardar datos anteriores al historial antes de editar
-    if (zona->datos_actuales.dia != 0) {
-        agregar_datos_historicos(sistema, zona_id, zona->datos_actuales);
-    }
-    
-    // Actualizar fecha
-    int dia, mes, ano;
-    obtener_fecha_actual(&dia, &mes, &ano);
-    zona->datos_actuales.dia = dia;
-    zona->datos_actuales.mes = mes;
-    zona->datos_actuales.ano = ano;
-    
-    switch(opcion) {
-        case 1:
-            leer_float_validado(&zona->datos_actuales.pm25, "Nuevo valor PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
-            break;
-        case 2:
-            leer_float_validado(&zona->datos_actuales.pm10, "Nuevo valor PM10 (ug/m3): ", 0.0, 1000.0, 0);
-            break;
-        case 3:
-            leer_float_validado(&zona->datos_actuales.co2, "Nuevo valor CO2 (ug/m3): ", 0.0, 100000.0, 0);
-            break;
-        case 4:
-            leer_float_validado(&zona->datos_actuales.so2, "Nuevo valor SO2 (ug/m3): ", 0.0, 1000.0, 0);
-            break;
-        case 5:
-            leer_float_validado(&zona->datos_actuales.no2, "Nuevo valor NO2 (ug/m3): ", 0.0, 1000.0, 0);
-            break;
-        case 6:
-            leer_float_validado(&zona->datos_actuales.temperatura, "Nueva temperatura (C): ", -50.0, 60.0, 1);
-            break;
-        case 7:
-            leer_float_validado(&zona->datos_actuales.humedad, "Nueva humedad (%): ", 0.0, 100.0, 0);
-            break;
-        case 8:
-            leer_float_validado(&zona->datos_actuales.velocidad_viento, "Nueva velocidad del viento (km/h): ", 0.0, 200.0, 0);
-            break;
-        case 9:
-            printf("\n=== INGRESO DE TODOS LOS VALORES ===\n");
-            leer_float_validado(&zona->datos_actuales.pm25, "PM2.5 (ug/m3): ", 0.0, 1000.0, 0);
-            leer_float_validado(&zona->datos_actuales.pm10, "PM10 (ug/m3): ", 0.0, 1000.0, 0);
-            leer_float_validado(&zona->datos_actuales.co2, "CO2 (ug/m3): ", 0.0, 100000.0, 0);
-            leer_float_validado(&zona->datos_actuales.so2, "SO2 (ug/m3): ", 0.0, 1000.0, 0);
-            leer_float_validado(&zona->datos_actuales.no2, "NO2 (ug/m3): ", 0.0, 1000.0, 0);
-            leer_float_validado(&zona->datos_actuales.temperatura, "Temperatura (C): ", -50.0, 60.0, 1);
-            leer_float_validado(&zona->datos_actuales.humedad, "Humedad (%): ", 0.0, 100.0, 0);
-            leer_float_validado(&zona->datos_actuales.velocidad_viento, "Velocidad del viento (km/h): ", 0.0, 200.0, 0);
-            break;
-        case 0:
-            printf("Edicion cancelada.\n");
-            return;
-        default:
-            printf("Opcion invalida. Edicion cancelada.\n");
-            return;
-    }
-    
-    printf("Datos editados exitosamente.\n");
-    
-    // Actualizar predicción con los nuevos datos
-    predecir_contaminacion_24h(zona);
-}
-
-// Elimina completamente una zona del sistema de monitoreo
-int eliminar_zona(SistemaContaminacion *sistema, int zona_id) {
-    int indice_zona = -1;
-    
-    // Buscar el índice de la zona
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            indice_zona = i;
-            break;
-        }
-    }
-    
-    if (indice_zona == -1) {
-        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
+    if (fscanf(f, "%d\n", num_zonas) != 1) {
+        fclose(f);
         return 0;
     }
-    
-    printf("\n=== ELIMINAR ZONA ===\n");
-    printf("Zona a eliminar: %s (ID: %d)\n", sistema->zonas[indice_zona].nombre, zona_id);
-    printf("Coordenadas: (%.4f, %.4f)\n", 
-           sistema->zonas[indice_zona].latitud, sistema->zonas[indice_zona].longitud);
-    printf("Registros historicos: %d\n", sistema->zonas[indice_zona].num_registros_historicos);
-    
-    printf("\n¡ADVERTENCIA!\n");
-    printf("Esta operacion eliminara PERMANENTEMENTE:\n");
-    printf("- Todos los datos actuales de la zona\n");
-    printf("- Todo el historial de %d dias\n", sistema->zonas[indice_zona].num_registros_historicos);
-    printf("- Las predicciones generadas\n");
-    printf("- La configuracion de la zona\n");
-    printf("\nEsta operacion NO se puede deshacer.\n");
-    
-    printf("\n¿Esta seguro de que desea eliminar esta zona? (s/n): ");
-    char confirmacion;
-    scanf(" %c", &confirmacion);
-    
-    if (confirmacion != 's' && confirmacion != 'S') {
-        printf("Operacion cancelada. La zona se mantiene intacta.\n");
-        return 0;
+    for (int i = 0; i < *num_zonas; i++) {
+        // Leer nombre de zona
+        if (!fgets(zonas[i].nombre, NOMBRE_ZONA, f)) { fclose(f); return 0; }
+        zonas[i].nombre[strcspn(zonas[i].nombre, "\n")] = '\0';
+        // Leer días registrados
+        int dias;
+        if (fscanf(f, "%d\n", &dias) != 1) { fclose(f); return 0; }
+        zonas[i].dias_registrados = dias;
+        // Leer historial de días
+        for (int j = 0; j < dias; j++) {
+            RegistroDia *r = &zonas[i].historial[j];
+            if (fscanf(f, "%10s %f %f %f %f %f %f %f %f\n",
+                       r->fecha, &r->pm25, &r->pm10, &r->co2, &r->so2, &r->no2,
+                       &r->temperatura, &r->humedad, &r->velocidad_viento) != 9) {
+                fclose(f);
+                return 0;
+            }
+        }
     }
-    
-    // Confirmar una segunda vez para estar seguro
-    printf("Escriba 'ELIMINAR' (en mayusculas) para confirmar definitivamente: ");
-    char confirmacion_final[20];
-    scanf("%s", confirmacion_final);
-    
-    if (strcmp(confirmacion_final, "ELIMINAR") != 0) {
-        printf("Confirmacion incorrecta. Operacion cancelada.\n");
-        return 0;
-    }
-    
-    // Proceder con la eliminación: mover todas las zonas siguientes hacia atrás
-    for (int i = indice_zona; i < sistema->num_zonas - 1; i++) {
-        sistema->zonas[i] = sistema->zonas[i + 1];
-    }
-    
-    // Reducir el contador de zonas
-    sistema->num_zonas--;
-    
-    printf("\nZona eliminada exitosamente.\n");
-    printf("El sistema ahora monitorea %d zonas.\n", sistema->num_zonas);
-    
-    // Actualizar timestamp del sistema
-    sistema->ultima_actualizacion = time(NULL);
-    
+    fclose(f);
     return 1;
 }
 
-// Permite al usuario editar el nombre y coordenadas GPS de una zona existente
-void editar_zona(SistemaContaminacion *sistema, int zona_id) {
-    ZonaMonitoreo *zona = NULL;
-    
-    // Buscar la zona
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        if (sistema->zonas[i].id == zona_id) {
-            zona = &sistema->zonas[i];
-            break;
+// Guarda los datos en un archivo de texto
+int guardar_zonas(Zona zonas[], int num_zonas) {
+    FILE *f = fopen(ARCHIVO_DATOS, "w");
+    if (!f) return 0;
+    fprintf(f, "%d\n", num_zonas);
+    for (int i = 0; i < num_zonas; i++) {
+        fprintf(f, "%s\n", zonas[i].nombre);
+        fprintf(f, "%d\n", zonas[i].dias_registrados);
+        for (int j = 0; j < zonas[i].dias_registrados; j++) {
+            RegistroDia *r = &zonas[i].historial[j];
+            fprintf(f, "%s %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+                    r->fecha, r->pm25, r->pm10, r->co2, r->so2, r->no2,
+                    r->temperatura, r->humedad, r->velocidad_viento);
         }
     }
-    
-    if (zona == NULL) {
-        printf("ERROR: Zona con ID %d no encontrada.\n", zona_id);
-        return;
-    }
-    
-    printf("\n=== EDICION DE ZONA - %s ===\n", zona->nombre);
-    printf("ID actual: %d\n", zona->id);
-    printf("Coordenadas actuales: (%.4f, %.4f)\n", zona->latitud, zona->longitud);
-    
-    // Editar nombre
-    char nuevo_nombre[100];
-    printf("Ingrese nuevo nombre para la zona (actual: %s): ", zona->nombre);
-    getchar(); // Limpiar buffer
-    fgets(nuevo_nombre, sizeof(nuevo_nombre), stdin);
-    nuevo_nombre[strcspn(nuevo_nombre, "\n")] = 0; // Eliminar salto de línea
-    
-    if (strlen(nuevo_nombre) > 0) {
-        strcpy(zona->nombre, nuevo_nombre);
-    }
-    
-    // Editar coordenadas
-    float nueva_latitud, nueva_longitud;
-    printf("Ingrese nueva latitud (actual: %.4f): ", zona->latitud);
-    scanf("%f", &nueva_latitud);
-    printf("Ingrese nueva longitud (actual: %.4f): ", zona->longitud);
-    scanf("%f", &nueva_longitud);
-    
-    // Validar coordenadas
-    if (nueva_latitud < -90.0 || nueva_latitud > 90.0 || nueva_longitud < -180.0 || nueva_longitud > 180.0) {
-        printf("ERROR: Coordenadas GPS invalidas. La zona no ha sido editada.\n");
-        return;
-    }
-    
-    zona->latitud = nueva_latitud;
-    zona->longitud = nueva_longitud;
-    
-    printf("Zona editada exitosamente.\n");
+    fclose(f);
+    return 1;
 }
 
-/*
- * ============================================================================
- * FUNCIONES DE REPORTES Y EXPORTACIÓN
- * ============================================================================
- */
-
-// Genera un reporte completo de la situación actual de contaminación del aire
-// Incluye datos actuales, predicciones, promedios históricos e índice de calidad del aire
-void generar_reporte_completo(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen(ARCHIVO_REPORTE, "w");
-    if (archivo == NULL) {
-        printf("Error al crear archivo de reporte.\n");
-        return;
-    }
-    
-    fprintf(archivo, "=== REPORTE INTEGRAL DE CONTAMINACIÓN DEL AIRE ===\n\n");
-    fprintf(archivo, "Fecha del reporte: %s", ctime(&sistema->ultima_actualizacion));
-    fprintf(archivo, "Número de zonas monitoreadas: %d\n\n", sistema->num_zonas);
-    
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        ZonaMonitoreo *zona = &sistema->zonas[i];
-        
-        fprintf(archivo, "--- ZONA %d: %s ---\n", zona->id, zona->nombre);
-        fprintf(archivo, "Ubicacion: (%.4f, %.4f)\n", zona->latitud, zona->longitud);
-        fprintf(archivo, "Registros historicos: %d\n\n", zona->num_registros_historicos);
-        
-        fprintf(archivo, "DATOS ACTUALES:\n");
-        fprintf(archivo, "PM2.5: %.2f ug/m3 (Limite: %.2f)\n", zona->datos_actuales.pm25, LIMITE_PM25);
-        fprintf(archivo, "PM10:  %.2f ug/m3 (Limite: %.2f)\n", zona->datos_actuales.pm10, LIMITE_PM10);
-        fprintf(archivo, "CO2:   %.2f ug/m3 (Limite: %.2f)\n", zona->datos_actuales.co2, LIMITE_CO2);
-        fprintf(archivo, "SO2:   %.2f ug/m3 (Limite: %.2f)\n", zona->datos_actuales.so2, LIMITE_SO2);
-        fprintf(archivo, "NO2:   %.2f ug/m3 (Limite: %.2f)\n", zona->datos_actuales.no2, LIMITE_NO2);
-        
-        fprintf(archivo, "\nCONDICIONES CLIMATICAS:\n");
-        fprintf(archivo, "Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
-        fprintf(archivo, "Humedad: %.1f%%\n", zona->datos_actuales.humedad);
-        fprintf(archivo, "Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
-        
-        fprintf(archivo, "\nPREDICCIONES 24H:\n");
-        fprintf(archivo, "PM2.5: %.2f ug/m3\n", zona->prediccion_24h[0]);
-        fprintf(archivo, "PM10:  %.2f ug/m3\n", zona->prediccion_24h[1]);
-        fprintf(archivo, "CO2:   %.2f ug/m3\n", zona->prediccion_24h[2]);
-        fprintf(archivo, "SO2:   %.2f ug/m3\n", zona->prediccion_24h[3]);
-        fprintf(archivo, "NO2:   %.2f ug/m3\n", zona->prediccion_24h[4]);
-        
-        float indice = calcular_indice_calidad_aire(&zona->datos_actuales);
-        fprintf(archivo, "\nINDICE DE CALIDAD DEL AIRE: %.1f (%s)\n", indice, obtener_categoria_calidad(indice));
-        
-        // Promedios historicos
-        if (zona->num_registros_historicos > 0) {
-            fprintf(archivo, "\nPROMEDIOS HISTORICOS (30 dias):\n");
-            fprintf(archivo, "PM2.5: %.2f ug/m3\n", calcular_promedio_historico(zona, 0));
-            fprintf(archivo, "PM10:  %.2f ug/m3\n", calcular_promedio_historico(zona, 1));
-            fprintf(archivo, "CO2:   %.2f ug/m3\n", calcular_promedio_historico(zona, 2));
-            fprintf(archivo, "SO2:   %.2f ug/m3\n", calcular_promedio_historico(zona, 3));
-            fprintf(archivo, "NO2:   %.2f ug/m3\n", calcular_promedio_historico(zona, 4));
-        }
-        
-        fprintf(archivo, "\n==================================================\n\n");
-    }
-    
-    fclose(archivo);
-    printf("Reporte completo generado en '%s'\n", ARCHIVO_REPORTE);
-}
-
-// Función para exportar datos a archivo binario
-void exportar_datos_binario(SistemaContaminacion *sistema) {
-    FILE *archivo = fopen("datos_contaminacion_exportados.dat", "wb");
-    if (archivo == NULL) {
-        printf("Error al crear archivo de exportacion binario.\n");
-        return;
-    }
-    
-    // Escribir encabezado como estructura
-    typedef struct {
-        char encabezado[200];
-        time_t fecha_exportacion;
-    } EncabezadoExportacion;
-    
-    EncabezadoExportacion enc;
-    strcpy(enc.encabezado, "Datos de Contaminacion - Sistema de Monitoreo Quito");
-    enc.fecha_exportacion = time(NULL);
-    fwrite(&enc, sizeof(EncabezadoExportacion), 1, archivo);
-    
-    // Escribir datos del sistema completo
-    fwrite(sistema, sizeof(SistemaContaminacion), 1, archivo);
-    
-    fclose(archivo);
-    printf("Copia de respaldo creada exitosamente en:\n");
-    printf("-> datos_contaminacion_exportados.dat\n");
-    printf("Este archivo contiene toda la informacion del sistema\n");
-    printf("en formato binario optimizado para portabilidad.\n");
-}
-
-// Función para mostrar estado actual
-void mostrar_estado_actual(SistemaContaminacion *sistema) {
-    printf("\n=== ESTADO ACTUAL DE CONTAMINACION ===\n");
-    printf("Ultima actualizacion: %s", ctime(&sistema->ultima_actualizacion));
-    
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        ZonaMonitoreo *zona = &sistema->zonas[i];
-        printf("\n--- ZONA %d: %s ---\n", zona->id, zona->nombre);
-        
-        if (zona->datos_actuales.dia == 0) {
-            printf("Sin datos actuales disponibles\n");
-            continue;
-        }
-        
-        printf("Fecha: %d/%d/%d\n", zona->datos_actuales.dia, zona->datos_actuales.mes, zona->datos_actuales.ano);
-        
-        printf("\nCONTAMINANTES:\n");
-        printf("  PM2.5: %.2f ug/m3 %s\n", zona->datos_actuales.pm25, 
-               zona->datos_actuales.pm25 > LIMITE_PM25 ? "EXCEDE LIMITE" : "OK");
-        printf("  PM10:  %.2f ug/m3 %s\n", zona->datos_actuales.pm10, 
-               zona->datos_actuales.pm10 > LIMITE_PM10 ? "EXCEDE LIMITE" : "OK");
-        printf("  CO2:   %.2f ug/m3 %s\n", zona->datos_actuales.co2, 
-               zona->datos_actuales.co2 > LIMITE_CO2 ? "EXCEDE LIMITE" : "OK");
-        printf("  SO2:   %.2f ug/m3 %s\n", zona->datos_actuales.so2, 
-               zona->datos_actuales.so2 > LIMITE_SO2 ? "EXCEDE LIMITE" : "OK");
-        printf("  NO2:   %.2f ug/m3 %s\n", zona->datos_actuales.no2, 
-               zona->datos_actuales.no2 > LIMITE_NO2 ? "EXCEDE LIMITE" : "OK");
-        
-        printf("\nCONDICIONES CLIMATICAS:\n");
-        printf("  Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
-        printf("  Humedad: %.1f%%\n", zona->datos_actuales.humedad);
-        printf("  Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
-        
-        float indice = calcular_indice_calidad_aire(&zona->datos_actuales);
-        printf("\nINDICE DE CALIDAD DEL AIRE: %.1f (%s)\n", indice, obtener_categoria_calidad(indice));
-    }
-}
-
-// Función para mostrar predicciones
-void mostrar_predicciones(SistemaContaminacion *sistema) {
-    printf("\n=== PREDICCIONES 24 HORAS ===\n");
-    
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        ZonaMonitoreo *zona = &sistema->zonas[i];
-        printf("\n--- ZONA %d: %s ---\n", zona->id, zona->nombre);
-        
-        printf("PREDICCIONES:\n");
-        printf("  PM2.5: %.2f ug/m3 %s\n", zona->prediccion_24h[0], 
-               zona->prediccion_24h[0] > LIMITE_PM25 ? "EXCEDERA LIMITE" : "OK");
-        printf("  PM10:  %.2f ug/m3 %s\n", zona->prediccion_24h[1], 
-               zona->prediccion_24h[1] > LIMITE_PM10 ? "EXCEDERA LIMITE" : "OK");
-        printf("  CO2:   %.2f ug/m3 %s\n", zona->prediccion_24h[2], 
-               zona->prediccion_24h[2] > LIMITE_CO2 ? "EXCEDERA LIMITE" : "OK");
-        printf("  SO2:   %.2f ug/m3 %s\n", zona->prediccion_24h[3], 
-               zona->prediccion_24h[3] > LIMITE_SO2 ? "EXCEDERA LIMITE" : "OK");
-        printf("  NO2:   %.2f ug/m3 %s\n", zona->prediccion_24h[4], 
-               zona->prediccion_24h[4] > LIMITE_NO2 ? "EXCEDERA LIMITE" : "OK");
-        
-        if (zona->num_registros_historicos > 0) {
-            printf("\nCOMPARACION CON PROMEDIO HISTORICO:\n");
-            printf("  PM2.5: Actual %.2f vs Promedio %.2f\n", zona->prediccion_24h[0], calcular_promedio_historico(zona, 0));
-            printf("  PM10:  Actual %.2f vs Promedio %.2f\n", zona->prediccion_24h[1], calcular_promedio_historico(zona, 1));
-            printf("  CO2:   Actual %.2f vs Promedio %.2f\n", zona->prediccion_24h[2], calcular_promedio_historico(zona, 2));
-            printf("  SO2:   Actual %.2f vs Promedio %.2f\n", zona->prediccion_24h[3], calcular_promedio_historico(zona, 3));
-            printf("  NO2:   Actual %.2f vs Promedio %.2f\n", zona->prediccion_24h[4], calcular_promedio_historico(zona, 4));
-        }
-    }
-}
-
-// Funciones de menú y interfaz
-void mostrar_menu_principal() {
+void mostrar_menu() {
     printf("\n============================================================\n");
     printf("    SISTEMA INTEGRAL DE GESTION DE CONTAMINACION DEL AIRE\n");
     printf("                      CIUDAD DE QUITO\n");
@@ -959,167 +68,420 @@ void mostrar_menu_principal() {
     printf("2. Mostrar predicciones para 24 horas\n");
     printf("3. Ingresar datos actuales de una zona\n");
     printf("4. Mostrar informacion de zonas monitoreadas\n");
-    printf("5. Generar alertas del sistema\n");
-    printf("6. Generar recomendaciones para una zona\n");
-    printf("7. Generar reporte completo\n");
-    printf("8. Exportar copia de respaldo (binario)\n");
-    printf("9. Anadir nueva zona de monitoreo\n");
-    printf("10. Editar datos de una zona existente\n");
-    printf("11. Eliminar una zona del sistema\n");
+    printf("5. Generar alertas y recomendaciones\n");
+    printf("6. Generar reporte completo\n");
+    printf("7. Exportar copia de respaldo\n");
+    printf("8. Anadir nueva zona de monitoreo\n");
+    printf("9. Editar datos de una zona existente\n");
+    printf("10. Eliminar una zona del sistema\n");
     printf("0. Salir del sistema\n");
     printf("1000. Reiniciar programa (eliminar todos los datos)\n");
     printf("============================================================\n");
     printf("NOTA: Todos los datos se gestionan automaticamente en\n");
-    printf("      formato binario para optimo rendimiento.\n");
+    printf("      formato de texto para mayor portabilidad.\n");
     printf("      El historial ahora almacena los ultimos 7 dias.\n");
     printf("============================================================\n");
     printf("Seleccione una opcion: ");
 }
 
-void mostrar_menu_zonas(SistemaContaminacion *sistema) {
-    printf("\n=== ZONAS MONITOREADAS ===\n");
+void limpiar_buffer() {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
+int validar_float(float valor, float min, float max) {
+    return valor >= min && valor <= max;
+}
+
+int leer_float(const char *mensaje, float min, float max, float *valor) {
+    char buffer[50];
+    char *endptr;
+    float temp;
+    int valido = 0;
+    do {
+        printf("%s", mensaje);
+        if (!fgets(buffer, sizeof(buffer), stdin)) return 0;
+        temp = strtof(buffer, &endptr);
+        if (endptr == buffer || (*endptr != '\n' && *endptr != '\0')) {
+            printf("Entrada invalida. Intente de nuevo.\n");
+            continue;
+        }
+        if (temp < min || temp > max) {
+            printf("Valor fuera de rango (%.2f - %.2f).\n", min, max);
+            continue;
+        }
+        *valor = temp;
+        valido = 1;
+    } while (!valido);
+    return 1;
+}
+
+int leer_int(const char *mensaje, int min, int max, int *valor) {
+    char buffer[50];
+    char *endptr;
+    long temp;
+    int valido = 0;
+    do {
+        printf("%s", mensaje);
+        if (!fgets(buffer, sizeof(buffer), stdin)) return 0;
+        temp = strtol(buffer, &endptr, 10);
+        if (endptr == buffer || (*endptr != '\n' && *endptr != '\0')) {
+            printf("Entrada invalida. Intente de nuevo.\n");
+            continue;
+        }
+        if (temp < min || temp > max) {
+            printf("Valor fuera de rango (%d - %d).\n", min, max);
+            continue;
+        }
+        *valor = (int)temp;
+        valido = 1;
+    } while (!valido);
+    return 1;
+}
+
+void ingresar_datos_actuales(Zona zonas[], int num_zonas) {
+    int op;
+    printf("\nSeleccione la zona para ingresar datos:\n");
+    for (int i = 0; i < num_zonas; i++)
+        printf("%d. %s\n", i + 1, zonas[i].nombre);
+    if (!leer_int("Opcion: ", 1, num_zonas, &op)) return;
     
-    if (sistema->num_zonas == 0) {
-        printf("No hay zonas registradas en el sistema.\n");
+    Zona *z = &zonas[op - 1];
+    if (z->dias_registrados == DIAS_HISTORIAL) {
+        for (int i = 1; i < DIAS_HISTORIAL; i++)
+            z->historial[i - 1] = z->historial[i];
+        z->dias_registrados--;
+    }
+    RegistroDia *r = &z->historial[z->dias_registrados];
+    printf("Ingrese la fecha (YYYY-MM-DD): ");
+    fgets(r->fecha, sizeof(r->fecha), stdin);
+    r->fecha[strcspn(r->fecha, "\n")] = 0;
+    leer_float("PM2.5: ", 0, 99999, &r->pm25);
+    leer_float("PM10: ", 0, 99999, &r->pm10);
+    leer_float("CO2: ", 0, 99999, &r->co2);
+    leer_float("SO2: ", 0, 99999, &r->so2);
+    leer_float("NO2: ", 0, 99999, &r->no2);
+    leer_float("Temperatura (C): ", -50, 60, &r->temperatura);
+    leer_float("Humedad (%%): ", 0, 100, &r->humedad);
+    leer_float("Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
+    z->dias_registrados++;
+    guardar_zonas(zonas, num_zonas);
+    printf("Datos ingresados correctamente.\n");
+}
+
+void anadir_zona(Zona zonas[], int *num_zonas) {
+    if (*num_zonas >= MAX_ZONAS) {
+        printf("No se pueden agregar mas zonas.\n");
         return;
     }
-    
-    for (int i = 0; i < sistema->num_zonas; i++) {
-        ZonaMonitoreo *zona = &sistema->zonas[i];
-        printf("\nZONA %d: %s\n", zona->id, zona->nombre);
-        printf("   Ubicacion: (%.4f, %.4f)\n", zona->latitud, zona->longitud);
-        printf("   Registros historicos: %d\n", zona->num_registros_historicos);
-        
-        if (zona->datos_actuales.dia != 0) {
-            float indice = calcular_indice_calidad_aire(&zona->datos_actuales);
-            printf("   Indice de calidad: %.1f (%s)\n", indice, obtener_categoria_calidad(indice));
+    printf("Nombre de la nueva zona: ");
+    fgets(zonas[*num_zonas].nombre, NOMBRE_ZONA, stdin);
+    zonas[*num_zonas].nombre[strcspn(zonas[*num_zonas].nombre, "\n")] = 0;
+    zonas[*num_zonas].dias_registrados = 0;
+    (*num_zonas)++;
+    guardar_zonas(zonas, *num_zonas);
+    printf("Zona agregada correctamente.\n");
+}
+
+void editar_zona(Zona zonas[], int num_zonas) {
+    int op_zona;
+    printf("\nSeleccione la zona a editar:\n");
+    for (int i = 0; i < num_zonas; i++)
+        printf("%d. %s\n", i + 1, zonas[i].nombre);
+    if (!leer_int("Opcion: ", 1, num_zonas, &op_zona)) return;
+
+    Zona *z = &zonas[op_zona - 1];
+    int op_edit;
+
+    do {
+        printf("\n--- Editando Zona: %s ---\n", z->nombre);
+        printf("1. Editar Nombre\n");
+        printf("2. Editar datos de un dia\n");
+        printf("0. Volver al menu principal\n");
+        if (!leer_int("Opcion: ", 0, 2, &op_edit)) continue;
+
+        switch (op_edit) {
+            case 1: {
+                printf("Nuevo nombre: ");
+                char buffer[NOMBRE_ZONA];
+                fgets(buffer, NOMBRE_ZONA, stdin);
+                buffer[strcspn(buffer, "\n")] = 0;
+                if (strlen(buffer) > 0) {
+                    strncpy(z->nombre, buffer, NOMBRE_ZONA);
+                    printf("Nombre actualizado.\n");
+                }
+                break;
+            }
+            case 2: {
+                if (z->dias_registrados == 0) {
+                    printf("No hay datos historicos para editar.\n");
+                    break;
+                }
+                printf("Seleccione el registro a editar:\n");
+                for (int i = 0; i < z->dias_registrados; i++) {
+                    printf("%d. %s\n", i + 1, z->historial[i].fecha);
+                }
+                int op_fecha;
+                if (!leer_int("Opcion: ", 1, z->dias_registrados, &op_fecha)) break;
+                
+                RegistroDia *r = &z->historial[op_fecha - 1];
+                printf("Editando datos para la fecha %s...\n", r->fecha);
+                leer_float("Nuevo PM2.5: ", 0, 99999, &r->pm25);
+                leer_float("Nuevo PM10: ", 0, 99999, &r->pm10);
+                leer_float("Nuevo CO2: ", 0, 99999, &r->co2);
+                leer_float("Nuevo SO2: ", 0, 99999, &r->so2);
+                leer_float("Nuevo NO2: ", 0, 99999, &r->no2);
+                leer_float("Nueva Temperatura (C): ", -50, 60, &r->temperatura);
+                leer_float("Nueva Humedad (%%): ", 0, 100, &r->humedad);
+                leer_float("Nueva Velocidad viento (km/h): ", 0, 500, &r->velocidad_viento);
+                printf("Datos del %s actualizados.\n", r->fecha);
+                break;
+            }
+        }
+    } while (op_edit != 0);
+    guardar_zonas(zonas, num_zonas);
+    printf("Cambios guardados.\n");
+}
+
+void mostrar_estado_actual(Zona zonas[], int num_zonas) {
+    printf("\nESTADO ACTUAL DE LAS ZONAS (ULTIMOS 7 DIAS):\n");
+    for (int i = 0; i < num_zonas; i++) {
+        printf("\nZona: %s\n", zonas[i].nombre);
+        printf("------------------------------------------------------------\n");
+        printf("Fecha      | PM2.5 | PM10 | CO2  | SO2  | NO2  | Temp | Hum | V.Viento\n");
+        printf("-----------|-------|------|------|------|------|------|-----|----------\n");
+        if (zonas[i].dias_registrados > 0) {
+            for (int j = 0; j < zonas[i].dias_registrados; j++) {
+                RegistroDia *r = &zonas[i].historial[j];
+                printf("%-10s | %5.1f | %4.1f | %4.1f | %4.1f | %4.1f | %4.1f | %3.1f | %7.1f\n",
+                    r->fecha, r->pm25, r->pm10, r->co2, r->so2, r->no2, r->temperatura, r->humedad, r->velocidad_viento);
+            }
         } else {
-            printf("   Sin datos actuales\n");
+            printf("No hay datos registrados.\n");
         }
     }
 }
 
-void mostrar_datos_zona(ZonaMonitoreo *zona) {
-    printf("\n=== DETALLES DE ZONA: %s ===\n", zona->nombre);
-    printf("ID: %d\n", zona->id);
-    printf("Coordenadas: (%.4f, %.4f)\n", zona->latitud, zona->longitud);
-    printf("Registros historicos: %d\n", zona->num_registros_historicos);
-    
-    if (zona->datos_actuales.dia != 0) {
-        printf("\nDATOS ACTUALES (%d/%d/%d):\n", 
-               zona->datos_actuales.dia, zona->datos_actuales.mes, zona->datos_actuales.ano);
-        printf("PM2.5: %.2f ug/m3\n", zona->datos_actuales.pm25);
-        printf("PM10:  %.2f ug/m3\n", zona->datos_actuales.pm10);
-        printf("CO2:   %.2f ug/m3\n", zona->datos_actuales.co2);
-        printf("SO2:   %.2f ug/m3\n", zona->datos_actuales.so2);
-        printf("NO2:   %.2f ug/m3\n", zona->datos_actuales.no2);
-        printf("Temperatura: %.1fC\n", zona->datos_actuales.temperatura);
-        printf("Humedad: %.1f%%\n", zona->datos_actuales.humedad);
-        printf("Viento: %.1f km/h\n", zona->datos_actuales.velocidad_viento);
-    }
-    
-    // Mostrar historial de los últimos 7 días
-    if (zona->num_registros_historicos > 0) {
-        printf("\n=== HISTORIAL DE LOS ULTIMOS 7 DIAS ===\n");
-        for (int i = zona->num_registros_historicos - 1; i >= 0; i--) {
-            DatosContaminacion *dato = &zona->historial[i];
-            printf("\nDia %d/%d/%d:\n", dato->dia, dato->mes, dato->ano);
-            printf("  PM2.5: %.2f | PM10: %.2f | CO2: %.2f\n", 
-                   dato->pm25, dato->pm10, dato->co2);
-            printf("  SO2: %.2f | NO2: %.2f | Temp: %.1fC\n", 
-                   dato->so2, dato->no2, dato->temperatura);
-            printf("  Humedad: %.1f%% | Viento: %.1f km/h\n", 
-                   dato->humedad, dato->velocidad_viento);
+void mostrar_predicciones(Zona zonas[], int num_zonas) {
+    printf("\nPREDICCIONES PARA LAS PROXIMAS 24 HORAS:\n");
+    for (int i = 0; i < num_zonas; i++) {
+        printf("\nZona: %s\n", zonas[i].nombre);
+        printf("------------------------------------------------------------\n");
+        printf("PM2.5 | PM10 | CO2  | SO2  | NO2  | Temp | Hum | V.Viento\n");
+        float sumas[8] = {0};
+        float pesos[3] = {0.6, 0.3, 0.1};
+        int dias = zonas[i].dias_registrados;
+        if (dias < 3) {
+            printf("No hay suficientes datos para predecir.\n");
+            continue;
         }
-    } else {
-        printf("\n=== HISTORIAL ===\n");
-        printf("No hay datos historicos disponibles para esta zona.\n");
+        for (int j = 0; j < 3; j++) {
+            RegistroDia *r = &zonas[i].historial[dias-1-j];
+            sumas[0] += r->pm25 * pesos[j];
+            sumas[1] += r->pm10 * pesos[j];
+            sumas[2] += r->co2 * pesos[j];
+            sumas[3] += r->so2 * pesos[j];
+            sumas[4] += r->no2 * pesos[j];
+            sumas[5] += r->temperatura * pesos[j];
+            sumas[6] += r->humedad * pesos[j];
+            sumas[7] += r->velocidad_viento * pesos[j];
+        }
+        printf("%5.1f | %4.1f | %4.1f | %4.1f | %4.1f | %4.1f | %3.1f | %7.1f\n",
+            sumas[0], sumas[1], sumas[2], sumas[3], sumas[4], sumas[5], sumas[6], sumas[7]);
     }
-    
-    printf("\nPREDICCIONES 24H:\n");
-    printf("PM2.5: %.2f ug/m3\n", zona->prediccion_24h[0]);
-    printf("PM10:  %.2f ug/m3\n", zona->prediccion_24h[1]);
-    printf("CO2:   %.2f ug/m3\n", zona->prediccion_24h[2]);
-    printf("SO2:   %.2f ug/m3\n", zona->prediccion_24h[3]);
-    printf("NO2:   %.2f ug/m3\n", zona->prediccion_24h[4]);
 }
 
-// Funciones auxiliares
-float calcular_indice_calidad_aire(DatosContaminacion *datos) {
-    // Calcular índice basado en el contaminante más crítico
-    float indices[5];
-    indices[0] = (datos->pm25 / LIMITE_PM25) * 100;
-    indices[1] = (datos->pm10 / LIMITE_PM10) * 100;
-    indices[2] = (datos->co2 / LIMITE_CO2) * 100;
-    indices[3] = (datos->so2 / LIMITE_SO2) * 100;
-    indices[4] = (datos->no2 / LIMITE_NO2) * 100;
-    
-    // Encontrar el índice máximo
-    float max_indice = indices[0];
-    for (int i = 1; i < 5; i++) {
-        if (indices[i] > max_indice) {
-            max_indice = indices[i];
+void mostrar_info_zonas(Zona zonas[], int num_zonas) {
+    printf("\nINFORMACION DE ZONAS MONITOREADAS:\n");
+    for (int i = 0; i < num_zonas; i++) {
+        printf("\nZona: %s\n", zonas[i].nombre);
+        printf("------------------------------------------------------------\n");
+        printf("Fecha      | PM2.5 | PM10 | CO2  | SO2  | NO2  | Temp | Hum | V.Viento\n");
+        printf("-----------|-------|------|------|------|------|------|-----|----------\n");
+        for (int j = 0; j < zonas[i].dias_registrados; j++) {
+            RegistroDia *r = &zonas[i].historial[j];
+            printf("%-10s | %5.1f | %4.1f | %4.1f | %4.1f | %4.1f | %4.1f | %3.1f | %7.1f\n",
+                r->fecha, r->pm25, r->pm10, r->co2, r->so2, r->no2, r->temperatura, r->humedad, r->velocidad_viento);
         }
     }
-    
-    return max_indice;
 }
 
-char* obtener_categoria_calidad(float indice) {
-    if (indice <= 50) return "Buena";
-    else if (indice <= 100) return "Moderada";
-    else if (indice <= 150) return "Insalubre para grupos sensibles";
-    else if (indice <= 200) return "Insalubre";
-    else if (indice <= 300) return "Muy insalubre";
-    else return "Peligrosa";
+void generar_alertas_y_recomendaciones(Zona zonas[], int num_zonas) {
+    printf("\nALERTAS Y RECOMENDACIONES DEL SISTEMA:\n");
+    int alertas_generadas = 0;
+
+    for (int i = 0; i < num_zonas; i++) {
+        if (zonas[i].dias_registrados == 0) continue;
+
+        RegistroDia *r = &zonas[i].historial[zonas[i].dias_registrados - 1];
+        int alerta_zona = 0;
+
+        // Buffer para acumular los mensajes de alerta de la zona
+        char mensaje_alerta[1024] = "";
+
+        if (r->pm25 > 25 || r->pm10 > 50) {
+            alerta_zona = 1;
+            strcat(mensaje_alerta, "  -> ALERTA: Niveles altos de material particulado (PM2.5/PM10).\n");
+            strcat(mensaje_alerta, "     - RECOMENDACIONES:\n");
+            strcat(mensaje_alerta, "       - Evitar actividad fisica intensa al aire libre.\n");
+            strcat(mensaje_alerta, "       - Grupos vulnerables (niños, ancianos, personas con asma) deben permanecer en interiores.\n");
+            strcat(mensaje_alerta, "       - Usar mascarillas N95 si es necesario salir.\n\n");
+        }
+        if (r->co2 > 1000) {
+            alerta_zona = 1;
+            strcat(mensaje_alerta, "  -> ALERTA: Niveles altos de Dioxido de Carbono (CO2).\n");
+            strcat(mensaje_alerta, "     - RECOMENDACIONES:\n");
+            strcat(mensaje_alerta, "       - Asegurar buena ventilacion en espacios cerrados.\n");
+            strcat(mensaje_alerta, "       - Reducir el uso de vehiculos a combustion en la zona.\n\n");
+        }
+        if (r->so2 > 20) {
+            alerta_zona = 1;
+            strcat(mensaje_alerta, "  -> ALERTA: Niveles altos de Dioxido de Azufre (SO2).\n");
+            strcat(mensaje_alerta, "     - RECOMENDACIONES:\n");
+            strcat(mensaje_alerta, "       - Personas con asma deben tener especial cuidado y evitar la exposicion.\n");
+            strcat(mensaje_alerta, "       - Limitar la exposicion en areas industriales o de alto trafico.\n\n");
+        }
+        if (r->no2 > 40) {
+            alerta_zona = 1;
+            strcat(mensaje_alerta, "  -> ALERTA: Niveles altos de Dioxido de Nitrogeno (NO2).\n");
+            strcat(mensaje_alerta, "     - RECOMENDACIONES:\n");
+            strcat(mensaje_alerta, "       - Reducir el uso de vehiculos, especialmente diesel.\n");
+            strcat(mensaje_alerta, "       - Evitar la quema de combustibles fosiles.\n\n");
+        }
+
+        if (alerta_zona) {
+            alertas_generadas = 1;
+            printf("\n------------------------------------------------------------\n");
+            printf("ALERTA EN ZONA: %s\n", zonas[i].nombre);
+            printf("%s", mensaje_alerta);
+        }
+    }
+
+    if (!alertas_generadas) {
+        printf("\nNo hay alertas activas. La calidad del aire en todas las zonas esta dentro de los limites aceptables.\n");
+    }
+    printf("\n");
 }
 
-void obtener_fecha_actual(int *dia, int *mes, int *ano) {
+const char* obtener_categoria_ica(float pm25) {
+    if (pm25 <= 12.0) return "Buena";
+    if (pm25 <= 35.4) return "Moderada";
+    if (pm25 <= 55.4) return "Dañina a la salud para grupos sensibles";
+    if (pm25 <= 150.4) return "Dañina a la salud";
+    if (pm25 <= 250.4) return "Muy dañina a la salud";
+    return "Peligrosa";
+}
+
+void generar_reporte(Zona zonas[], int num_zonas) {
+    FILE *f = fopen("reporte_integral.txt", "w");
+    if (!f) {
+        printf("No se pudo crear el reporte.\n");
+        return;
+    }
+
     time_t t = time(NULL);
-    struct tm *fecha = localtime(&t);
-    
-    *dia = fecha->tm_mday;
-    *mes = fecha->tm_mon + 1;
-    *ano = fecha->tm_year + 1900;
+    struct tm *tm_info = localtime(&t);
+    char buffer_fecha[50];
+    strftime(buffer_fecha, sizeof(buffer_fecha), "%a %b %d %H:%M:%S %Y", tm_info);
+
+    fprintf(f, "=== REPORTE INTEGRAL DE CONTAMINACIÓN DEL AIRE ===\n\n");
+    fprintf(f, "Fecha del reporte: %s\n", buffer_fecha);
+    fprintf(f, "Número de zonas monitoreadas: %d\n\n", num_zonas);
+
+    for (int i = 0; i < num_zonas; i++) {
+        Zona *z = &zonas[i];
+        fprintf(f, "--- ZONA %d: %s ---\n", i + 1, z->nombre);
+        fprintf(f, "Registros historicos: %d\n\n", z->dias_registrados);
+
+        if (z->dias_registrados > 0) {
+            RegistroDia *r_actual = &z->historial[z->dias_registrados - 1];
+            fprintf(f, "DATOS ACTUALES:\n");
+            fprintf(f, "PM2.5: %.2f ug/m3 (Limite: 25.00)\n", r_actual->pm25);
+            fprintf(f, "PM10:  %.2f ug/m3 (Limite: 50.00)\n", r_actual->pm10);
+            fprintf(f, "CO2:   %.2f ppm (Limite: 1000.00)\n", r_actual->co2);
+            fprintf(f, "SO2:   %.2f ug/m3 (Limite: 20.00)\n", r_actual->so2);
+            fprintf(f, "NO2:   %.2f ug/m3 (Limite: 40.00)\n\n", r_actual->no2);
+
+            fprintf(f, "CONDICIONES CLIMATICAS:\n");
+            fprintf(f, "Temperatura: %.1fC\n", r_actual->temperatura);
+            fprintf(f, "Humedad: %.1f%%\n", r_actual->humedad);
+            fprintf(f, "Viento: %.1f km/h\n\n", r_actual->velocidad_viento);
+
+            fprintf(f, "PREDICCIONES 24H:\n");
+            if (z->dias_registrados >= 3) {
+                float sumas[5] = {0};
+                float pesos[3] = {0.6, 0.3, 0.1};
+                for (int j = 0; j < 3; j++) {
+                    RegistroDia *r_hist = &z->historial[z->dias_registrados - 1 - j];
+                    sumas[0] += r_hist->pm25 * pesos[j];
+                    sumas[1] += r_hist->pm10 * pesos[j];
+                    sumas[2] += r_hist->co2 * pesos[j];
+                    sumas[3] += r_hist->so2 * pesos[j];
+                    sumas[4] += r_hist->no2 * pesos[j];
+                }
+                fprintf(f, "PM2.5: %.2f ug/m3\n", sumas[0]);
+                fprintf(f, "PM10:  %.2f ug/m3\n", sumas[1]);
+                fprintf(f, "CO2:   %.2f ppm\n", sumas[2]);
+                fprintf(f, "SO2:   %.2f ug/m3\n", sumas[3]);
+                fprintf(f, "NO2:   %.2f ug/m3\n\n", sumas[4]);
+            } else {
+                fprintf(f, "No hay suficientes datos para predecir.\n\n");
+            }
+
+            const char* categoria_ica = obtener_categoria_ica(r_actual->pm25);
+            fprintf(f, "INDICE DE CALIDAD DEL AIRE: %.2f (%s)\n\n", r_actual->pm25, categoria_ica);
+
+            fprintf(f, "PROMEDIOS HISTORICOS (%d dias):\n", z->dias_registrados);
+            float promedios[5] = {0};
+            for (int j = 0; j < z->dias_registrados; j++) {
+                promedios[0] += z->historial[j].pm25;
+                promedios[1] += z->historial[j].pm10;
+                promedios[2] += z->historial[j].co2;
+                promedios[3] += z->historial[j].so2;
+                promedios[4] += z->historial[j].no2;
+            }
+            fprintf(f, "PM2.5: %.2f ug/m3\n", promedios[0] / z->dias_registrados);
+            fprintf(f, "PM10:  %.2f ug/m3\n", promedios[1] / z->dias_registrados);
+            fprintf(f, "CO2:   %.2f ppm\n", promedios[2] / z->dias_registrados);
+            fprintf(f, "SO2:   %.2f ug/m3\n", promedios[3] / z->dias_registrados);
+            fprintf(f, "NO2:   %.2f ug/m3\n", promedios[4] / z->dias_registrados);
+
+        } else {
+            fprintf(f, "No hay datos registrados para esta zona.\n");
+        }
+        fprintf(f, "\n==================================================\n\n");
+    }
+
+    fclose(f);
+    printf("Reporte integral generado en reporte_integral.txt\n");
 }
 
-float aplicar_factor_climatico(float valor_base, float temperatura, float humedad, float viento) {
-    float factor = 1.0;
-    
-    // Factor de temperatura (temperaturas altas aumentan la contaminacion)
-    if (temperatura > 25.0) {
-        factor += (temperatura - 25.0) * 0.02; // 2% por grado sobre 25C
+void exportar_respaldo(Zona zonas[], int num_zonas) {
+    FILE *f = fopen(ARCHIVO_RESPALDO, "wb");
+    if (!f) {
+        printf("No se pudo exportar el respaldo.\n");
+        return;
     }
-    
-    // Factor de humedad (alta humedad puede aumentar PM)
-    if (humedad > 70.0) {
-        factor += (humedad - 70.0) * 0.005; // 0.5% por punto sobre 70%
-    }
-    
-    // Factor de viento (viento bajo aumenta acumulacion)
-    if (viento < 10.0) {
-        factor *= (1.0 + (10.0 - viento) * 0.05); // 5% por km/h bajo 10
-    } else {
-        factor *= (1.0 - (viento - 10.0) * 0.02); // Reduccion con viento alto
-    }
-    
-    // Limitar el factor entre 0.5 y 2.0
-    if (factor < 0.5) factor = 0.5;
-    if (factor > 2.0) factor = 2.0;
-    
-    return valor_base * factor;
+    fwrite(&num_zonas, sizeof(int), 1, f);
+    fwrite(zonas, sizeof(Zona), num_zonas, f);
+    fclose(f);
+    printf("Respaldo exportado en %s\n", ARCHIVO_RESPALDO);
 }
 
-// Función para reiniciar el programa
+void eliminar_zona(Zona zonas[], int *num_zonas) {
+    int op;
+    printf("\nSeleccione la zona a eliminar:\n");
+    for (int i = 0; i < *num_zonas; i++)
+        printf("%d. %s\n", i+1, zonas[i].nombre);
+    if (!leer_int("Opcion: ", 1, *num_zonas, &op)) return;
+    for (int i = op-1; i < *num_zonas-1; i++)
+        zonas[i] = zonas[i+1];
+    (*num_zonas)--;
+    guardar_zonas(zonas, *num_zonas);
+    printf("Zona eliminada correctamente.\n");
+}
+
 void reiniciar_programa() {
-    printf("\n=== REINICIANDO SISTEMA ===\n");
-    printf("Eliminando datos actuales...\n");
-    
-    // Eliminar archivo de datos si existe
     remove(ARCHIVO_DATOS);
-    
-    printf("Datos eliminados. El programa se reiniciara con configuracion inicial.\n");
-    printf("Presione Enter para continuar...");
-    getchar();
-    getchar();
+    printf("Todos los datos han sido eliminados.\n");
 }
